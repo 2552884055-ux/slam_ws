@@ -1,0 +1,16 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/orangepi/ros_ws/devel/lib/python3/dist-packages",
+        "/home/orangepi/fast-lio_ws/devel/lib/python3/dist-packages",
+        "/home/orangepi/fast-livo_ws/devel/lib/python3/dist-packages",
+        "/home/orangepi/livox-SDK2/ws_livox/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/orangepi/ros_ws/devel/lib/python3/dist-packages",
+        "/home/orangepi/fast-lio_ws/devel/lib/python3/dist-packages",
+        "/home/orangepi/fast-livo_ws/devel/lib/python3/dist-packages",
+        "/home/orangepi/livox-SDK2/ws_livox/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ]
+}

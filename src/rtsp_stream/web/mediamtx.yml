@@ -1,0 +1,36 @@
+# mediamtx配置文件
+# 用于将RTSP流转换为WebRTC供浏览器播放
+
+# RTSP服务器配置
+rtspAddress: :8554
+rtspEncryption: "no"
+rtspServerKey: server.key
+rtspServerCert: server.crt
+
+# WebRTC配置
+webrtcAddress: :8889
+webrtcEncryption: false
+webrtcServerKey: server.key
+webrtcServerCert: server.crt
+webrtcICEServers:
+  - urls: [stun:stun.l.google.com:19302]
+
+# HLS配置（可选）
+hlsAddress: :8888
+hlsEncryption: false
+hlsServerKey: server.key
+hlsServerCert: server.crt
+
+# 路径配置
+paths:
+  # 建图流
+  mapping:
+    source: rtsp://localhost:8554/mapping
+    sourceProtocol: rtsp
+    sourceOnDemand: yes
+    runOnDemand: roslaunch rtsp_stream rtsp_stream.launch
+    runOnDemandRestart: yes
+
+  # 可以添加更多路径
+  # camera:
+  #   source: rtsp://localhost:8554/camera

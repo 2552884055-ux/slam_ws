@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>建图视频流监控</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .video-container {
+            position: relative;
+            padding: 30px;
+            background: #f5f5f5;
+        }
+        
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%; /* 16:9 */
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        
+        #videoPlayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .input-group {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 25px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .status {
+            padding: 20px 30px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            font-weight: bold;
+            color: #666;
+        }
+        
+        .status-value {
+            color: #333;
+        }
+        
+        .status-online {
+            color: #28a745;
+        }
+        
+        .status-offline {
+            color: #dc3545;
+        }
+        
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 30px;
+            border-radius: 5px;
+        }
+        
+        .info-box h3 {
+            color: #1976D2;
+            margin-bottom: 10px;
+        }
+        
+        .info-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .info-box li {
+            padding: 5px 0;
+            color: #555;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 1.5em;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗺️ 建图视频流监控</h1>
+            <p>实时查看FAST-LIO建图过程</p>
+        </div>
+        
+        <div class="video-container">
+            <div class="video-wrapper">
+                <video id="videoPlayer" controls autoplay muted>
+                    您的浏览器不支持视频播放
+                </video>
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <div>正在连接视频流...</div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="input-group">
+                    <label for="rtspUrl">RTSP地址</label>
+                    <input type="text" id="rtspUrl" value="ws://localhost:8889/mapping" 
+                           placeholder="ws://IP:8889/mapping">
+                </div>
+                <button class="btn btn-primary" onclick="connectStream()">连接</button>
+                <button class="btn btn-secondary" onclick="disconnectStream()">断开</button>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h3>📋 使用说明</h3>
+            <ul>
+                <li><strong>步骤1:</strong> 确保ROS建图系统正在运行</li>
+                <li><strong>步骤2:</strong> 启动mediamtx服务器进行RTSP到WebRTC转换</li>
+                <li><strong>步骤3:</strong> 在上方输入框填入WebSocket地址（格式: ws://IP:8889/mapping）</li>
+                <li><strong>步骤4:</strong> 点击"连接"按钮开始观看视频流</li>
+                <li><strong>提示:</strong> 如果使用VLC或FFplay，可以直接播放RTSP流（rtsp://IP:8554/mapping）</li>
+            </ul>
+        </div>
+        
+        <div class="status">
+            <div class="status-item">
+                <span class="status-label">连接状态:</span>
+                <span class="status-value" id="connectionStatus">
+                    <span class="status-offline">未连接</span>
+                </span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">视频分辨率:</span>
+                <span class="status-value" id="resolution">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">帧率:</span>
+                <span class="status-value" id="fps">-</span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const videoPlayer = document.getElementById('videoPlayer');
+        const loading = document.getElementById('loading');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const resolution = document.getElementById('resolution');
+        const fpsDisplay = document.getElementById('fps');
+        
+        let pc = null;
+        let ws = null;
+        
+        function connectStream() {
+            const url = document.getElementById('rtspUrl').value;
+            
+            if (!url) {
+                alert('请输入RTSP地址');
+                return;
+            }
+            
+            loading.style.display = 'block';
+            
+            // 使用WebRTC连接（通过mediamtx）
+            if (url.startsWith('ws://')) {
+                connectWebRTC(url);
+            } else {
+                alert('浏览器不支持直接播放RTSP流，请使用WebSocket地址（ws://）或使用VLC/FFplay播放器');
+            }
+        }
+        
+        function connectWebRTC(url) {
+            pc = new RTCPeerConnection({
+                iceServers: [{
+                    urls: 'stun:stun.l.google.com:19302'
+                }]
+            });
+            
+            pc.ontrack = (event) => {
+                videoPlayer.srcObject = event.streams[0];
+                loading.style.display = 'none';
+                updateStatus('online');
+            };
+            
+            pc.addTransceiver('video', { direction: 'recvonly' });
+            
+            pc.createOffer().then((offer) => {
+                pc.setLocalDescription(offer);
+                
+                ws = new WebSocket(url);
+                
+                ws.onopen = () => {
+                    ws.send(JSON.stringify({
+                        type: 'offer',
+                        sdp: offer.sdp
+                    }));
+                };
+                
+                ws.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'answer') {
+                        pc.setRemoteDescription(new RTCSessionDescription({
+                            type: 'answer',
+                            sdp: msg.sdp
+                        }));
+                    }
+                };
+                
+                ws.onerror = () => {
+                    alert('WebSocket连接失败，请检查mediamtx是否运行');
+                    loading.style.display = 'none';
+                    updateStatus('offline');
+                };
+            });
+        }
+        
+        function disconnectStream() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            videoPlayer.srcObject = null;
+            updateStatus('offline');
+            loading.style.display = 'none';
+        }
+        
+        function updateStatus(status) {
+            if (status === 'online') {
+                connectionStatus.innerHTML = '<span class="status-online">已连接</span>';
+            } else {
+                connectionStatus.innerHTML = '<span class="status-offline">未连接</span>';
+            }
+        }
+        
+        // 监听视频元数据加载
+        videoPlayer.addEventListener('loadedmetadata', () => {
+            resolution.textContent = `${videoPlayer.videoWidth} x ${videoPlayer.videoHeight}`;
+        });
+        
+        // 简单的FPS计算
+        let lastTime = Date.now();
+        let frameCount = 0;
+        
+        videoPlayer.addEventListener('timeupdate', () => {
+            frameCount++;
+            const now = Date.now();
+            if (now - lastTime >= 1000) {
+                fpsDisplay.textContent = `${frameCount} FPS`;
+                frameCount = 0;
+                lastTime = now;
+            }
+        });
+    </script>
+</body>
+</html>

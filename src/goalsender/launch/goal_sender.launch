@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- 目标设备IP地址 -->
+  <arg name="target_ip" default="192.168.110.180" />
+  
+  <!-- 目标设备端口 -->
+  <arg name="target_port" default="8115" />
+  
+  <!-- 本地UDP端口 -->
+  <arg name="local_port" default="8112" />
+  
+  <!-- 里程计话题名称 -->
+  <arg name="odom_topic" default="/Odometry" />
+  
+  <!-- 地图参数（用于世界坐标转像素坐标） -->
+  <!-- 这些参数需要根据实际地图的 YAML 文件配置 -->
+  <arg name="map_resolution" default="0.05" />      <!-- 分辨率：米/像素 -->
+  <arg name="map_origin_x" default="-10.0" />       <!-- 地图原点 X 坐标（米） -->
+  <arg name="map_origin_y" default="-10.0" />       <!-- 地图原点 Y 坐标（米） -->
+  <arg name="map_width" default="400" />            <!-- 地图宽度（像素） -->
+  <arg name="map_height" default="400" />           <!-- 地图高度（像素） -->
+  
+  <!-- 启动位置发送节点 -->
+  <node name="goal_sender_node" pkg="goal_sender" type="goal_sender_node" output="screen">
+    <param name="target_ip" value="$(arg target_ip)" />
+    <param name="target_port" value="$(arg target_port)" />
+    <param name="local_port" value="$(arg local_port)" />
+    <param name="odom_topic" value="$(arg odom_topic)" />
+    
+    <!-- 地图参数 -->
+    <param name="map_resolution" value="$(arg map_resolution)" />
+    <param name="map_origin_x" value="$(arg map_origin_x)" />
+    <param name="map_origin_y" value="$(arg map_origin_y)" />
+    <param name="map_width" value="$(arg map_width)" />
+    <param name="map_height" value="$(arg map_height)" />
+  </node>
+  
+</launch>

@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <arg name="laser" default="mid360" />
+
+    <!-- start sensor-->
+    <!-- <include file="$(find openni2_launch)/launch/openni2.launch">
+        <arg name="camera" default="$(arg camera)"/>
+    </include> -->
+
+    <!-- run pointcloud_to_laserscan node -->
+    <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node" name="pointcloud_to_laserscan">
+
+        <!-- <remap from="cloud_in" to="/tf_pointcloud"/> -->
+        <remap from="cloud_in" to="/cloud_registered"/>
+        <remap from="scan" to="$(arg laser)/scan"/>
+        <rosparam>
+            target_frame: robot_body    #目标坐标系
+            transform_tolerance: 0.01   #点云时间戳与坐标系tf时间戳的最小间隔(匹配判定条件)
+            <!-- min_height: -0.1
+            max_height: 0.2 -->
+
+            min_height: -0.5
+            max_height: 0.5
+
+            angle_min: -3.141592     # -M_PI
+            angle_max: 3.141592      # M_PI
+            angle_increment: 0.01745 # M_PI/360.0    (解算为360的数据)
+            scan_time: 0.3333
+            range_min: 0.1              #传感器范围
+            range_max: 10.0
+            use_inf: true               #初始数据都赋值为inf
+
+            # Concurrency level, affects number of pointclouds queued for processing and number of threads used
+            # 0 : Detect number of cores
+            # 1 : Single threaded
+            # 2->inf : Parallelism level
+            concurrency_level: 1
+        </rosparam>
+
+    </node>
+
+</launch>

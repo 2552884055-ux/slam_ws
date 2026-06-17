@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- RTSP流参数配置 -->
+    <arg name="image_topic" default="/camera/image_raw" />
+    <arg name="rtsp_port" default="8554" />
+    <arg name="stream_name" default="mapping" />
+    <arg name="fps" default="30" />
+    <arg name="width" default="1280" />
+    <arg name="height" default="720" />
+    <arg name="bitrate" default="2M" />
+    <arg name="use_gstreamer" default="false" />
+
+    <!-- 启动RTSP服务器节点 (简化版，不依赖cv_bridge) -->
+    <node pkg="rtsp_stream" type="rtsp_server_simple.py" name="rtsp_stream_server" 
+          output="screen" launch-prefix="python3">
+        <param name="image_topic" value="$(arg image_topic)" />
+        <param name="rtsp_port" value="$(arg rtsp_port)" />
+        <param name="stream_name" value="$(arg stream_name)" />
+        <param name="fps" value="$(arg fps)" />
+        <param name="width" value="$(arg width)" />
+        <param name="height" value="$(arg height)" />
+        <param name="bitrate" value="$(arg bitrate)" />
+    </node>
+</launch>

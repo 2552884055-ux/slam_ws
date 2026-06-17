@@ -1,0 +1,153 @@
+
+# slam_ws 使用说明
+
+---
+
+## 一、环境搭建
+
+### 1. 硬件与系统
+- 推荐 rk3588（不建议香橙派5，资源有限）
+- 推荐系统：Ubuntu 20.04  
+  镜像下载：Orangepi5_1.1.10_ubuntu_focal_desktop_xfce_linux6.1.43  
+  烧录SD卡，连接显示器、键盘、鼠标，按开发手册配置远程开发（NoMachine、MobaXterm、VSCode等）
+
+### 2. 软件开发环境
+- 远程主机配置：  
+  `ssh-keygen -R 远程主机IP地址`
+
+#### 2.1 一键安装ROS
+```bash
+wget http://fishros.com/install -O fishros && . fishros
+# 选择安装 ros1-noetic
+```
+
+#### 2.2 安装 Livox-SDK
+```bash
+git clone https://github.com/Livox-SDK/Livox-SDK2.git
+cd Livox-SDK2/
+mkdir build && cd build
+cmake .. && make -j
+sudo make install
+```
+
+#### 2.3 安装 livox_ros_driver2
+```bash
+git clone https://github.com/Livox-SDK/livox_ros_driver2.git ws_livox/src/livox_ros_driver2
+source /opt/ros/noetic/setup.sh
+./build.sh ROS1
+```
+
+#### 2.5 其他工具
+- GIMP（用于修正pgm地图）
+```bash
+sudo apt install -y gimp language-pack-gnome-zh-hant language-pack-gnome-zh-hans
+```
+
+---
+
+## 二、常见问题与注意事项
+
+1. Livox 驱动安装可参考：[CSDN教程](https://blog.csdn.net/z1872385/article/details/130702880)
+2. 使用 mid360 时，需将 fast-lio 的 CMakeLists.txt 和 package.xml 中的 `livox_ros_driver` 改为 `livox_ros_driver2`，并修改 laserMapping.cpp/laserMapping_re.cpp 的 include。
+3. 香橙派编译建议降低并行线程数（如 `make -j4`）。
+4. 若找不到 livox_ros_driver2，手动复制到对应目录下。
+5. 若出现 fast_lio/Pose6D.h 报错，需在 FAST_LIO 的 CMakeLists.txt 第88行添加：
+   ```cmake
+   add_dependencies(fastlio_mapping ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+   ```
+6. 使用Rviz时等页面显示的时候，要插一个HDMI欺骗器，否则程序会运行报错。
+---
+
+## 三、src 目录结构说明
+
+- **FAST_LIO_GLOBAL/**  
+  基于激光雷达和 IMU 的高性能前端里程计与建图算法。  
+  主要功能：实现激光-IMU紧耦合的实时定位与建图，支持点云去畸变、IMU预积分、状态估计、回环检测、多楼层地图切换与巡检等。适合机器人自主导航和多楼层环境下的高精度定位。主要模块包括：IMU 预处理、点云去畸变、滤波器状态估计、地图管理、重定位等。
+
+- **livox_ros_driver2/**  
+  Livox 官方激光雷达 ROS 驱动包。  
+  主要功能：采集 Livox 系列雷达的原始点云和 IMU 数据，并发布为 ROS 消息（如 /livox/lidar、/livox/imu），供下游 SLAM、建图、感知等模块使用。支持多种 Livox 设备和多话题输出，适合高性能实时应用。
+
+- **map_switch/**  
+  多楼层/多区域地图切换与管理模块。  
+  主要功能：实现机器人跨楼层或多区域时的地图文件切换、初始位姿重定位等，保证机器人在不同楼层/区域间无缝切换地图和定位。通常包含地图切换服务、初始位姿发布等功能。
+
+- **octomap_mapping/**  
+  基于 OctoMap 的三维栅格地图构建模块。  
+  主要功能：将点云数据转换为八叉树结构的三维占据栅格地图（OctoMap），常用于三维环境建图、路径规划和避障。支持地图保存、加载、可视化等。
+
+- **pcd2pgm_package/**  
+  点云地图（PCD）与栅格地图（PGM）格式转换工具包。  
+  主要功能：实现点云地图与二维栅格地图的互相转换，便于在不同算法或导航模块间切换地图格式。常用于将三维点云地图投影为2D导航地图，或将2D地图转为点云格式。
+
+- **pointcloud_to_laserscan/**  
+  点云转激光扫描线工具包。  
+  主要功能：将三维点云数据投影为二维激光扫描数据（LaserScan），便于与传统2D激光SLAM或导航算法兼容。适用于只有3D雷达但需要2D激光数据的场景。
+
+---
+
+## 四、建图相关
+
+1. 修改雷达专属编号如：47MDM6F0020144，专属ip如：192.168.1.144，连接雷达网口的本机ip如：192.168.1.50  
+   默认情况下，Livox雷达的ip地址是192.168.1.1XX，子网掩码是255.255.255.0，XX为雷达的后两位编号。连接雷达的电脑网口ip需要与雷达在同一网段，默认为192.168.1.50。  
+   上面的雷达配置参数可以在 Livox Viewer2软件中查看和修改。
+
+2. 启动 livox_ros_driver2 节点
+   ```bash
+   source ./devel/setup.bash
+   roslaunch livox_ros_driver2 msg_MID360.launch
+   ```
+
+3. 启动 fast_lio_global 节点
+   ```bash
+   source ./devel/setup.bash
+   roslaunch fast_lio_global mapping_mid360.launch
+   ```
+
+4. 手动遥控机器狗运动，在地图中行走，观察 Rviz 中的地图构建效果。
+
+5. 保存二维地图
+   ```bash
+   rosrun map_server map_saver map:=/projected_map -f /home/orangepi/slam_ws/src/FAST_LIO_GLOBAL/PCD/scans
+   ```
+   对应的 yaml 文件地图参数中的 nan 需要修改为 0，否则加载地图会报错。
+
+---
+
+## 五、运行项目程序
+
+1. 启动 livox_ros_driver2 节点
+   ```bash
+   source ./devel/setup.bash
+   roslaunch livox_ros_driver2 msg_MID360.launch
+   ```
+
+2. 启动整体工程
+   ```bash
+   source ./devel/setup.bash
+   roslaunch map_switch project.launch
+   ```
+
+---
+
+## 六、程序的自启动
+
+1. **开机自启动**  
+   直接开机自启 auto_start.sh 脚本即可。
+
+2. **按键触发脚本**  
+   开机自启动脚本监听 GPIO 按键事件，高电平时触发启动 auto_start.sh 脚本。  
+   参考 gpio_trigger.py 脚本（肇庆巡检机器狗版本使用按键启动）
+
+3. **监听端口启动脚本**  
+   开机自启动脚本监听指定端口的网络连接请求，收到请求时触发启动 auto_start.sh 脚本。  
+   参考 port_trigger.py 脚本（码垛机器人版本使用监听端口启动）
+
+4. **其他**  
+   根据项目具体需求考虑其他触发机制。
+
+---
+
+## 刘海洋
+## 2025.12.19
+

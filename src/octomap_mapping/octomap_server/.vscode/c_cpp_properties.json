@@ -1,0 +1,32 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/orangepi/ros_ws/devel/include/**",
+        "/home/orangepi/fast-lio_ws/devel/include/**",
+        "/home/orangepi/fast-livo_ws/devel/include/**",
+        "/home/orangepi/livox-SDK2/ws_livox/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/orangepi/ros_ws/src/ros_astra_camera/include/**",
+        "/home/orangepi/fast-lio_ws/src/FAST_LIO/include/**",
+        "/home/orangepi/fast-lio_ws/src/FAST_LIO_GLOBAL/include/**",
+        "/home/orangepi/fast-livo_ws/src/FAST-LIVO/include/**",
+        "/home/orangepi/fast-lio_ws/src/livox_laser_simulation/include/**",
+        "/home/orangepi/fast-lio_ws/src/octomap_mapping/octomap_server/include/**",
+        "/home/orangepi/fast-livo_ws/src/rpg_vikit/vikit_common/include/**",
+        "/home/orangepi/fast-livo_ws/src/rpg_vikit/vikit_ros/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-arm64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

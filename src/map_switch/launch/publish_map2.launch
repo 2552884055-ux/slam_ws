@@ -1,0 +1,22 @@
+<launch>
+
+    <node pkg="fast_lio_global" type="fastlio_mapping_global" name="laserMapping" output="screen" /> 
+
+    <arg name="3dmap_path" default="$(find fast_lio_global)/PCD/scans_507_out.pcd" />
+    <node pkg="pcl_ros" type="pcd_to_pointcloud" name="map_publishe" output="screen"
+        args="$(arg 3dmap_path) 5 _frame_id:=pcd_map cloud_pcd:=pcd_map" />
+
+    <arg name="gridmap_path" default="scans_507_out.yaml" />
+    <node pkg="map_server" type="map_server" name="map_server" args="$(find fast_lio_global)/PCD/$(arg gridmap_path)">
+        <remap from="map" to="grid_map" />
+    </node>
+
+	<node pkg="fast_lio_global" type="global_localization.py" name="global_localization" output="screen">
+		<env name="PYTHONPATH" value="/home/orangepi/.local/lib/python3.8/site-packages"/>
+	</node>
+
+	<node pkg="fast_lio_global" type="transform_fusion.py" name="transform_fusion" output="screen" />
+	
+    <node pkg="map_switch" type="tf_publish" name="tf_robot2map" output="screen" />
+
+</launch>

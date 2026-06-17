@@ -1,0 +1,21 @@
+maps:
+  - id: 1
+    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map1.sh"
+    tx_to_map1: 0.0
+    ty_to_map1: 0.0
+    theta_to_map1: 0.0
+  - id: 2
+    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map2.sh"
+    tx_to_map1: 7.85
+    ty_to_map1: 1.62
+    theta_to_map1: -1.55
+  - id: 3
+    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map3.sh"
+    tx_to_map1: 0.0
+    ty_to_map1: 0.0
+    theta_to_map1: 0.0
+  - id: 4
+    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map4.sh"
+    tx_to_map1: 0.0
+    ty_to_map1: 0.0
+    theta_to_map1: 0.0
