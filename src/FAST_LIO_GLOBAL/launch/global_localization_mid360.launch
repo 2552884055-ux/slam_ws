@@ -1,0 +1,99 @@
+<launch>
+<!-- Launch file for global localization based on Livox MID360 LiDAR -->
+	<rosparam command="load" file="$(find fast_lio_global)/config/mid360.yaml" />
+
+	<!-- true or false -->
+	<arg name="rviz" default="true" />	
+	<arg name="laser_scan_en" default="true" />
+	<arg name="tfDate_pulish_en" default="true" />
+
+	<param name="feature_extract_enable" type="bool" value="0"/>
+	<param name="point_filter_num" type="int" value="3"/>
+	<param name="max_iteration" type="int" value="3" />
+	<param name="filter_size_surf" type="double" value="0.5" />
+	<param name="filter_size_map" type="double" value="0.5" />
+	<param name="cube_side_length" type="double" value="1000" />
+	<param name="runtime_pos_log_enable" type="bool" value="0" />
+
+	<node pkg="tf2_ros" type="static_transform_publisher" name="Init_IMU2robot" args="0 0 0 0 0 0 /camera_init /robot" />
+	<node pkg="tf2_ros" type="static_transform_publisher" name="body2robot" args="0 0 0 0 0 0 /body /robot_body" />
+	<node pkg="tf2_ros" type="static_transform_publisher" name="gridmap" args="0 0 0 0 0 0 /pcd_map /map" />
+
+    <node pkg="fast_lio_global" type="fastlio_mapping_global" name="laserMapping" output="screen" /> 
+	<!-- <node name="map_switch_node" pkg="map_switch" type="map_switch" output="screen" /> -->
+
+
+
+
+    <arg name="localization_en" default="true" />
+
+    <arg name="3dmap_path" default="$(find fast_lio)/PCD/scans2.pcd" />
+    <node pkg="pcl_ros" type="pcd_to_pointcloud" name="map_publishe1" output="screen"
+        args="$(arg 3dmap_path) 5 _frame_id:=pcd_map cloud_pcd:=pcd_map" />
+
+    <arg name="gridmap_path" default="scans2.yaml" />
+    <node pkg="map_server" type="map_server" name="map_server1" args="$(find fast_lio)/PCD/$(arg gridmap_path)">
+        <remap from="map" to="grid_map" />
+    </node>
+
+	<group if="$(arg localization_en)">
+		<node pkg="fast_lio_global" type="global_localization.py" name="global_localization1" output="screen">
+			<env name="PYTHONPATH" value="/home/orangepi/.local/lib/python3.8/site-packages"/>
+		</node>
+		<node pkg="fast_lio_global" type="transform_fusion.py" name="transform_fusion1" output="screen" />
+		<node pkg="fast_lio_global" type="publish_initial_pose.py" name="publish_initial_pose2" args="0 -0.5 0 0 0 0" output="screen"/>
+	</group>
+
+	<node pkg="pointcloud_tf" type="tf_publish" name="tf_robot2map1" output="screen" />
+
+
+
+
+
+
+
+
+
+
+	<!-- point to laser -->
+	<group if="$(arg laser_scan_en)">
+		<include file="$(find pointcloud_to_laserscan)/launch/sample_node.launch">
+		</include>
+	</group>
+
+	<!-- publish robot position -->
+	<group if="$(arg tfDate_pulish_en)">
+
+		<param name="source_frame" type="str" value="/robot_body"/>
+		<param name="target_frame" type="str" value="/map"/>
+		<param name="pub_topic" type="str" value="/robot_position"/>
+
+		<param name="socket_en" type="bool" value="true"/>
+		<param name="http_en" type="bool" value="false"/>
+		<param name="socket_print_en" type="bool" value="false"/>
+
+		<!-- 本launch文件中的配置优先 -->
+
+		<!-- 雷达数据发送端（本机地址） -->
+		<param name="server_addr" type="str" value="192.168.110.206"/>
+		<!-- <param name="server_addr" type="str" value="192.168.31.49"/> -->
+		<!-- 6001是接收雷达数据请求的端口 -->
+		<param name="server_PORT" type="int" value="6001"/>
+		<!-- 7001是接收地图切换请求的端口 -->
+		<param name="map_switch_PORT" type="int" value="7001"/>
+		<!-- 雷达数据接收端地址 -->
+		<param name="client_addr" type="str" value="192.168.110.180"/>
+		<!-- <param name="client_addr" type="str" value="192.168.31.49"/> -->
+		<!-- 6002是对方接收雷达数据的端口 -->
+		<param name="client_PORT" type="int" value="6002"/>  
+
+		<!-- <node pkg="pointcloud_tf" type="tf_publish" name="tf_robot2map" output="screen" /> -->
+
+	</group>
+
+	<!-- rviz -->
+	<group if="$(arg rviz)">
+	<node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find fast_lio_global)/rviz_cfg/lio_global.rviz" />
+	</group>
+
+</launch>

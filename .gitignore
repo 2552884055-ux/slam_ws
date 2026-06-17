@@ -1,0 +1,18 @@
+# Catkin / ROS build outputs
+build/
+devel/
+install/
+logs/
+.catkin_tools/
+
+# 运行产生的输出文件
+**/Log/
+**/PCD/
+*.pcd
+*.pgm
+*.bag
+
+# 编辑器 / 系统
+*.pyc
+__pycache__/
+.DS_Store

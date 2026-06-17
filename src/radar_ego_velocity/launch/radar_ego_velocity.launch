@@ -1,0 +1,25 @@
+<launch>
+  <!-- ============ SR71 雷达 -> 自速度 -> /radar_velocity ============ -->
+
+  <!-- (1) 串口驱动: 读 SR71 串口(TTL)数据, 发布 /radar_scan (仅 Linux) -->
+  <node pkg="radar_ego_velocity" type="sr71_serial_node" name="sr71_serial_node" output="screen">
+    <param name="port"       value="/dev/ttyUSB0"/>   <!-- 实际串口设备, 按系统改 -->
+    <param name="baudrate"   value="115200"/>          <!-- 波特率, 按协议文档改 -->
+    <param name="frame_id"   value="radar"/>
+    <param name="scan_topic" value="/radar_scan"/>
+  </node>
+
+  <!-- (2) 自速度估计: /radar_scan -> /radar_velocity -->
+  <node pkg="radar_ego_velocity" type="radar_ego_velocity_node" name="radar_ego_velocity_node" output="screen">
+    <param name="radar_scan_topic" value="/radar_scan"/>
+    <param name="output_topic"     value="/radar_velocity"/>
+    <param name="mode_2d"          value="true"/>    <!-- SR71 object模式只有方位角 => 2D -->
+    <param name="doppler_sign"     value="1.0"/>     <!-- 标定: 朝雷达前进时输出应为正前向, 否则改 -1.0 -->
+    <param name="ransac_iter"      value="100"/>
+    <param name="inlier_thresh"    value="0.15"/>
+    <param name="min_inliers"      value="5"/>
+    <param name="min_range"        value="0.5"/>
+    <param name="max_range"        value="20.0"/>
+    <param name="max_speed"        value="5.0"/>
+  </node>
+</launch>

@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>radar_ego_velocity</name>
+  <version>0.1.0</version>
+  <description>
+    毫米波雷达自速度估计: 解析雷达目标(方位/俯仰/距离/多普勒),
+    用 RANSAC + 最小二乘估计载体自速度, 发布 geometry_msgs/TwistStamped,
+    供 FAST-LIO 紧耦合融合以对抗退化(管廊/长走廊)场景。
+  </description>
+
+  <maintainer email="dev@example.com">haiyang</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>message_generation</depend>
+  <depend>eigen</depend>
+
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+</package>

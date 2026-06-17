@@ -1,0 +1,54 @@
+common:
+    lid_topic:  "/livox/lidar"
+    imu_topic:  "/livox/imu"
+    time_sync_en: false         # ONLY turn on when external time synchronization is really not possible
+    time_offset_lidar_to_imu: 0.0 # Time offset between lidar and IMU calibrated by other algorithms, e.g. LI-Init (can be found in README).
+                                  # This param will take effect no matter what time_sync_en is. So if the time offset is not known exactly, please set as 0.0
+
+preprocess:
+    lidar_type: 1                # 1 for Livox serials LiDAR, 2 for Velodyne LiDAR, 3 for ouster LiDAR, 
+    scan_line: 4
+    blind: 0.5
+
+mapping:
+    acc_cov: 0.1
+    gyr_cov: 0.1
+    b_acc_cov: 0.0001
+    b_gyr_cov: 0.0001
+    fov_degree:    360
+    det_range:     100.0
+    extrinsic_est_en:  false      # true: enable the online estimation of IMU-LiDAR extrinsic
+    extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
+    extrinsic_R: [ 1, 0, 0,
+                   0, 1, 0,
+                   0, 0, 1]
+    #yaw 25
+    # extrinsic_R: [ 0.9063078, -0.4226183, 0,
+    #                0.4226183, 0.9063078, 0,
+    #                0, 0, 1]
+
+publish:
+    path_en:  false
+    scan_publish_en:  true       # false: close all the point cloud output
+    dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
+    scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
+
+pcd_save:
+    pcd_save_en: true
+    interval: -1                 # how many LiDAR frames saved in each pcd file;
+                                 # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.
+
+radar:                            # 毫米波雷达速度紧耦合(抗退化)
+    radar_en: true                # 启用雷达速度融合
+    radar_topic: "/radar_velocity"# 由 radar_ego_velocity 节点发布(雷达系自速度)
+    vel_cov: 0.04                 # 水平速度观测噪声(≈(0.2 m/s)^2), 越小越信任雷达
+    vel_cov_z: 1.0e6              # 垂直速度噪声: 2D雷达设很大=>忽略z; 有俯仰角可改小(如0.04)
+    chi2_thr: 16.0                # 卡方门限(3自由度), 残差过大则拒绝该帧观测
+    time_tol: 0.05               # 雷达速度与雷达帧的时间匹配容差(s)
+    min_trans_vel: 0.3           # 平移速度阈值(m/s): 自转/悬停时平滑降权雷达, 防杆臂项注入幽灵速度
+    # 雷达->IMU 外参(机头45°朝下安装), 必须按实际安装标定!
+    extrinsic_T: [ 0.20, 0.0, -0.05 ]   # 机头杆臂(m): 雷达相对IMU的位置
+    # 下例为"绕Y轴 -45°(朝下前视)"的旋转矩阵, 仅示意, 请按实测替换
+    extrinsic_R: [ 0.70710678, 0.0, -0.70710678,
+                   0.0,        1.0,  0.0,
+                   0.70710678, 0.0,  0.70710678 ]

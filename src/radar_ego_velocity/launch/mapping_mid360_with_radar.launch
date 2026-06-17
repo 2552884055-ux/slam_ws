@@ -1,0 +1,13 @@
+<launch>
+  <!-- FAST-LIO(MID360) + 毫米波雷达速度紧耦合 一键启动 -->
+
+  <!-- 1) FAST-LIO 建图(已含雷达速度融合, 由 mid360.yaml 的 radar: 段控制开关) -->
+  <include file="$(find fast_lio_global)/launch/mapping_mid360.launch">
+    <arg name="rviz" value="true"/>
+  </include>
+
+  <!-- 2) 雷达自速度估计链路: SR71 CAN -> /radar_scan -> /radar_velocity -->
+  <include file="$(find radar_ego_velocity)/launch/radar_ego_velocity.launch"/>
+
+  <!-- 注意: FAST-LIO 订阅的 radar_topic 默认 /radar_velocity, 与上面输出一致, 无需重映射 -->
+</launch>
