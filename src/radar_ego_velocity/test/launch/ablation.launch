@@ -1,0 +1,82 @@
+<launch>
+  <!-- ================================================================
+       雷达抗退化 消融实验 launch (无需真雷达)
+       三种run靠 degrade / radar_en 两个开关组合:
+         Run1 参考 :  degrade:=false radar_en:=false   (全视场, 录 /Odometry 当真值)
+         Run2 退化 :  degrade:=true  radar_en:=false   (人工退化, 纯LiDAR, 应该漂)
+         Run3 修复 :  degrade:=true  radar_en:=true    (退化+合成雷达, 应该救回来)
+       配合 rosbag play 使用, 详见 EXPERIMENT.md
+       ================================================================ -->
+
+  <arg name="degrade"      default="false"/>   <!-- 是否人工退化LiDAR -->
+  <arg name="radar_en"     default="false"/>   <!-- 是否开启雷达速度融合(+合成节点) -->
+  <arg name="degrade_mode" default="corridor"/><!-- corridor / fov / passthrough -->
+  <arg name="halfwidth"    default="30"/>      <!-- 保留扇区半宽(度) -->
+  <arg name="rviz"         default="true"/>
+  <arg name="chi2_thr"     default="16.0"/>    <!-- 雷达卡方门限(调参用) -->
+  <arg name="vel_cov"      default="0.04"/>    <!-- 融合端速度观测噪声(调参用) -->
+  <arg name="radar_noise"  default="0.05"/>   <!-- 合成雷达测量噪声std(m/s) -->
+  <arg name="acc_cov"      default="0.1"/>    <!-- IMU加速度过程噪声(退化方向P_vel增长) -->
+  <arg name="vel_only"     default="false"/> <!-- 雷达只更新速度(H的rot/bg置零, 退化方向更稳) -->
+  <arg name="robust"       default="false"/> <!-- 退化感知解耦速度更新(抗强退化长隧道) -->
+  <arg name="pvel_floor"   default="0.5"/>   <!-- 速度协方差下限 -->
+
+  <!-- FAST-LIO 参数 (与 mapping_mid360.launch 对齐) -->
+  <rosparam command="load" file="$(find fast_lio_global)/config/mid360.yaml" />
+  <param name="feature_extract_enable" type="bool"   value="0"/>
+  <param name="point_filter_num"       type="int"    value="3"/>
+  <param name="max_iteration"          type="int"    value="3"/>
+  <param name="filter_size_surf"       type="double" value="0.5"/>
+  <param name="filter_size_map"        type="double" value="0.5"/>
+  <param name="cube_side_length"       type="double" value="1000"/>
+  <param name="pcd_save/pcd_save_en"   type="bool"   value="false"/>
+  <!-- 离线消融: 关掉socket网络发送, 避免副作用 -->
+  <param name="socket_en"       type="bool" value="false"/>
+  <param name="socket_print_en" type="bool" value="false"/>
+  <!-- 用 arg 覆盖 yaml 里的 radar_en, 实现一键开关 -->
+  <param name="radar/radar_en"  type="bool"   value="$(arg radar_en)"/>
+  <param name="radar/chi2_thr"  type="double" value="$(arg chi2_thr)"/>
+  <param name="radar/vel_cov"   type="double" value="$(arg vel_cov)"/>
+  <param name="mapping/acc_cov"  type="double" value="$(arg acc_cov)"/>
+  <param name="radar/vel_only"   type="bool"   value="$(arg vel_only)"/>
+  <param name="radar/robust"     type="bool"   value="$(arg robust)"/>
+  <param name="radar/pvel_floor" type="double" value="$(arg pvel_floor)"/>
+
+  <!-- LiDAR 退化节点: /livox/lidar -> /livox/lidar_deg -->
+  <group if="$(arg degrade)">
+    <node pkg="radar_ego_velocity" type="lidar_degrade.py" name="lidar_degrade" output="screen">
+      <param name="mode"             value="$(arg degrade_mode)"/>
+      <param name="keep_halfwidth_deg" value="$(arg halfwidth)"/>
+      <param name="input_topic"      value="/livox/lidar"/>
+      <param name="output_topic"     value="/livox/lidar_deg"/>
+    </node>
+  </group>
+
+  <!-- 合成雷达速度节点: /ref_odom (+/livox/imu) -> /radar_velocity -->
+  <group if="$(arg radar_en)">
+    <node pkg="radar_ego_velocity" type="radar_vel_synth.py" name="radar_vel_synth" output="screen">
+      <param name="ref_odom_topic" value="/ref_odom"/>
+      <param name="imu_topic"      value="/livox/imu"/>
+      <param name="output_topic"   value="/radar_velocity"/>
+      <!-- 外参/噪声 与 mid360.yaml radar 段保持一致 -->
+      <rosparam param="extrinsic_R">[0.70710678, 0.0, -0.70710678,
+                                     0.0, 1.0, 0.0,
+                                     0.70710678, 0.0, 0.70710678]</rosparam>
+      <rosparam param="extrinsic_T">[0.20, 0.0, -0.05]</rosparam>
+      <param name="noise_std" value="$(arg radar_noise)"/>
+    </node>
+  </group>
+
+  <!-- FAST-LIO 建图: 退化时把订阅从 /livox/lidar 重映射到退化后的 /livox/lidar_deg -->
+  <node if="$(arg degrade)" pkg="fast_lio_global" type="fastlio_mapping_global"
+        name="laserMapping" output="screen">
+    <remap from="/livox/lidar" to="/livox/lidar_deg"/>
+  </node>
+  <node unless="$(arg degrade)" pkg="fast_lio_global" type="fastlio_mapping_global"
+        name="laserMapping" output="screen"/>
+
+  <group if="$(arg rviz)">
+    <node pkg="rviz" type="rviz" name="rviz" launch-prefix="nice"
+          args="-d $(find fast_lio_global)/rviz_cfg/loam_livox.rviz"/>
+  </group>
+</launch>

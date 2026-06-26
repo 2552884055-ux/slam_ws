@@ -1,7 +1,7 @@
 <launch>
 <!-- Launch file for global localization based on Livox MID360 LiDAR -->
-	<rosparam command="load" file="$(find map_switch)/config/mid360.yaml" />
-    <rosparam command="load" file="$(find map_switch)/config/floors.yaml" />
+	<rosparam command="load" file="$(find all_project)/config/mid360.yaml" />
+    <rosparam command="load" file="$(find all_project)/config/floors.yaml" />
 
 	<!-- true or false -->
     <arg name="rviz" default="true" />	
@@ -44,7 +44,7 @@
     <!-- 6002是对方接收雷达数据的端口 -->
     <param name="client_PORT" type="int" value="6002"/> 
 
-	<node pkg="map_switch" type="map_switch" name="map_switch_node" output="screen" />
+	<node pkg="all_project" type="map_switch" name="map_switch_node" output="screen" />
     
 
     <!-- point to laser -->

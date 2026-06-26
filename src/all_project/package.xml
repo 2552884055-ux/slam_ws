@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>map_switch</name>
+  <name>all_project</name>
   <version>0.0.0</version>
-  <description>The map_switch package</description>
+  <description>多楼层地图切换(map_switch)与位姿/激光 UDP 上报(tf_publish)双节点</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->

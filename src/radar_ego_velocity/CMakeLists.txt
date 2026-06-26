@@ -32,6 +32,14 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
 )
 
+# ---- 仿真测试用 Python 脚本 (无需真雷达, 见 test/) ----
+catkin_install_python(PROGRAMS
+  test/scripts/radar_vel_synth.py
+  test/scripts/lidar_degrade.py
+  test/scripts/sim_corridor.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 # ---- 自速度估计节点 (核心, 平台无关) ----
 add_executable(radar_ego_velocity_node src/radar_ego_velocity_node.cpp)
 add_dependencies(radar_ego_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})

@@ -1,4 +1,4 @@
-# 楼层地图配置(节点由 map_switch 用 C++ 直接 rosrun 启动,不再用 .sh / .launch)
+# 楼层地图配置(节点由 all_project 的 map_switch 用 C++ 直接 rosrun 启动,不再用 .sh / .launch)
 #   pcd     : 三维点云地图文件名(位于 fast_lio_global/PCD/)
 #   gridmap : 二维栅格地图 yaml 文件名(位于 fast_lio_global/PCD/)
 #   exit_x/exit_y/exit_yaw : RELOC 重定位锚点(出梯位姿,map系,yaw弧度),缺省为 0

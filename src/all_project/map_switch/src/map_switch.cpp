@@ -2,16 +2,13 @@
 
 int main(int argc, char* argv[])
 {
-    setlocale(LC_ALL,"");
+    setlocale(LC_ALL, "");
     ros::init(argc, argv, "tcp_map_switch_node");
-    ros::NodeHandle nh;
 
-    TcpMapSwitchNode node;
-    if (!node.init())
-    {
+    MapSwitchNode node;
+    if (!node.init()) {
         return -1;
     }
-    node.start();
 
     ros::spin();
 
