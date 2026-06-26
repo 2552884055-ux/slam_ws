@@ -1,21 +1,66 @@
+# 楼层地图配置(节点由 map_switch 用 C++ 直接 rosrun 启动,不再用 .sh / .launch)
+#   pcd     : 三维点云地图文件名(位于 fast_lio_global/PCD/)
+#   gridmap : 二维栅格地图 yaml 文件名(位于 fast_lio_global/PCD/)
+#   exit_x/exit_y/exit_yaw : RELOC 重定位锚点(出梯位姿,map系,yaw弧度),缺省为 0
+#                            其余层电梯口=地图原点 → (0,0,0);map1 出梯点不在原点 → 单独配
+#   tx/ty/theta_to_map1 : 各层坐标系到 map1 的变换,供 convertBetweenMaps 使用
+
+# RELOC 初值来源开关:
+#   false(默认) = 用各层固定电梯口锚点 exit_x/exit_y/exit_yaw 重定位(电梯流程推荐)
+#   true        = 用 convertBetweenMaps 把上位机请求坐标(源图系)换算到目标图系作为初值
+#                 (依赖各层 tx/ty/theta_to_map1 标定准确)
+use_coord_transform: false
+
+# 开机自动起栈的初始地图ID;<=0 表示用下面 maps 列表里的第一张
+initial_map_id: 1
+# 开机起栈时机器人所在的初始位姿(map系,yaw弧度),不一定是 0;与电梯口锚点 exit_* 相互独立
+initial_x: 0.0
+initial_y: 0.0
+initial_yaw: 0.0
+
 maps:
   - id: 1
-    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map1.sh"
+    pcd: "scans_507_in.pcd"
+    gridmap: "scans_507_in.yaml"
+    exit_x: 0.0
+    exit_y: -10.4
+    exit_yaw: 1.52
     tx_to_map1: 0.0
     ty_to_map1: 0.0
     theta_to_map1: 0.0
   - id: 2
-    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map2.sh"
-    tx_to_map1: 7.85
-    ty_to_map1: 1.62
-    theta_to_map1: -1.55
+    pcd: "scans_507_out.pcd"
+    gridmap: "scans_507_out.yaml"
+    exit_x: 0.0
+    exit_y: 0.0
+    exit_yaw: 0.0
+    tx_to_map1: 0.0
+    ty_to_map1: 0.0
+    theta_to_map1: 0.0
   - id: 3
-    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map3.sh"
+    pcd: "scans_507_in.pcd"
+    gridmap: "scans_507_in.yaml"
+    exit_x: 0.0
+    exit_y: 0.0
+    exit_yaw: 0.0
     tx_to_map1: 0.0
     ty_to_map1: 0.0
     theta_to_map1: 0.0
   - id: 4
-    start_script: "/home/orangepi/slam_ws/src/map_switch/scripts/start_map4.sh"
+    pcd: "scans_507_in.pcd"
+    gridmap: "scans_507_in.yaml"
+    exit_x: 0.0
+    exit_y: 0.0
+    exit_yaw: 0.0
+    tx_to_map1: 0.0
+    ty_to_map1: 0.0
+    theta_to_map1: 0.0
+  - id: 5
+    pcd: "scans_507_in.pcd"
+    gridmap: "scans_507_in.yaml"
+    exit_x: 0.0
+    exit_y: 0.0
+    exit_yaw: 0.0
     tx_to_map1: 0.0
     ty_to_map1: 0.0
     theta_to_map1: 0.0

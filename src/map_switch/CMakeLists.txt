@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   pcl_ros
   roscpp
+  roslib
   rospy
   sensor_msgs
   std_msgs

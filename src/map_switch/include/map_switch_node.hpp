@@ -1,23 +1,31 @@
 /**
- * @file tcp_map_switch_node.h
- * @brief TCP地图切换节点类定义文件
+ * @file map_switch_node.hpp
+ * @brief TCP地图切换节点(两阶段;节点由 C++ 直接 fork/execvp(rosrun) 启动,不再依赖 .sh / .launch)
  *
- * 本模块实现一个基于TCP的地图管理与切换功能：
- * - 通过TCP监听客户端请求，实现地图切换控制；
- * - 管理地图启动与停止脚本；
- * - 负责不同地图坐标系之间的坐标转换；
- * - 在ROS系统中发布初始位姿以实现重定位。
+ * 两阶段切换(由上位机两条TCP指令触发):
+ *   - LOAD  (cmd=1):进电梯——停旧节点、起目标层"预加载"节点(map_publishe/map_server/
+ *                    global_localization/transform_fusion/tf_robot2map,不含 laserMapping),
+ *                    等 global_localization 加载好地图并挂起等初值。期间不重定位。
+ *   - RELOC (cmd=2):出电梯静止——启动 laserMapping(干净 IMU 初始化、odom≈I),
+ *                    发布初始位姿触发一次重定位,等待完成后回执。
  *
- * 作者:  
- * 日期: 2025-10-15
+ * 启动方式:每个节点由本进程 fork() 后在子进程 execvp("rosrun", pkg, type, args...) 启动,
+ *           并以独立进程组运行;停图时按 PID(进程组)精确 kill,不再用 rosnode kill / 脚本。
+ *           laserMapping 等 FAST-LIO 参数仍由 project.launch 预先加载到参数服务器。
  */
 
 #pragma once
 
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <std_msgs/Bool.h>
+#include <nav_msgs/Odometry.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <tf/transform_datatypes.h>
 
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 
@@ -27,186 +35,147 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <signal.h>
 #include <iostream>
 #include <sstream>
 #include <map>
+#include <utility>
 #include <cmath>
 #include <errno.h>
 
+/** TCP 请求命令字(req_frame.cmd) */
+enum MapSwitchCmd {
+    CMD_LOAD  = 1,   ///< 进电梯:预加载目标地图(不含 laserMapping,不重定位)
+    CMD_RELOC = 2    ///< 出电梯:启动 laserMapping 并发布初始位姿触发重定位
+};
+
 /**
  * @struct req_frame
- * @brief TCP客户端请求数据帧结构
- *
- * 用于描述客户端发起的地图切换请求或坐标转换请求。
+ * @brief TCP客户端请求数据帧(定长,二进制)
+ * 注意:cmd 为首字段,上位机需按此布局发送。
  */
 struct req_frame
 {
-    unsigned long frame_type;   ///< 帧类型标识（例如：1=切换地图、2=更新坐标等）
-    unsigned long seq;          ///< 请求序列号，用于追踪应答
-    float x;                    ///< 源地图中的X坐标
-    float y;                    ///< 源地图中的Y坐标
-    float yaw;                  ///< 源地图中的航向角（弧度制）
+    unsigned long cmd;          ///< 1=LOAD 2=RELOC
+    unsigned long frame_type;   ///< 目标地图ID
+    unsigned long seq;          ///< 请求序列号
+    float x;                    ///< 初始位姿X(RELOC;电梯流程填0)
+    float y;                    ///< 初始位姿Y(RELOC;电梯流程填0)
+    float yaw;                  ///< 初始位姿yaw(弧度;RELOC;电梯流程填0)
 };
 
 /**
  * @struct replay_frame
- * @brief TCP服务端应答数据帧结构
- *
- * 服务端向客户端返回的操作结果与序列号。
+ * @brief TCP服务端应答数据帧
  */
 struct replay_frame
 {
-    bool result;                ///< 操作结果（true表示成功，false表示失败）
-    unsigned long seq;          ///< 对应请求的序列号
+    bool result;                ///< true成功 / false失败
+    unsigned long seq;          ///< 对应请求序列号
 };
 
 /**
  * @struct MapInfo
- * @brief 地图信息结构体
- *
- * 存储地图启动脚本路径与该地图相对于参考地图（通常是map1）的位姿转换关系。
+ * @brief 地图信息(由 config/floors.yaml 提供)
  */
 struct MapInfo {
     unsigned long id;           ///< 地图唯一ID
-    std::string start_script;   ///< 启动该地图的脚本路径
-    float tx_to_map1;           ///< 相对map1的X平移量
+    std::string pcd;            ///< 三维点云地图文件名(位于 fast_lio_global/PCD/)
+    std::string gridmap;        ///< 二维栅格地图 yaml 文件名(位于 fast_lio_global/PCD/)
+    float exit_x;               ///< RELOC 重定位锚点(出梯位姿,map系)X,默认0
+    float exit_y;               ///< RELOC 重定位锚点 Y,默认0
+    float exit_yaw;             ///< RELOC 重定位锚点 yaw(弧度),默认0
+    float tx_to_map1;           ///< 相对map1的X平移量(convertBetweenMaps 可选用)
     float ty_to_map1;           ///< 相对map1的Y平移量
-    float theta_to_map1;        ///< 相对map1的旋转角（弧度）
+    float theta_to_map1;        ///< 相对map1的旋转角(弧度)
 };
 
 /**
- * @struct MapTransform
- * @brief 地图间位姿转换参数
+ * @struct NodeSpec
+ * @brief 一个 ROS 节点的启动描述(供 rosrun 启动)
  */
-struct MapTransform {
-    float tx;                   ///< 平移量X
-    float ty;                   ///< 平移量Y
-    float theta;                ///< 旋转角（弧度）
+struct NodeSpec {
+    std::string name;                                          ///< 节点名(__name:=)
+    std::string pkg;                                           ///< rosrun 包名
+    std::string type;                                          ///< rosrun 可执行/脚本名
+    std::vector<std::string> args;                             ///< 透传给节点的位置参数/remap/私有参数
+    // 注:固定环境变量(PYTHONPATH)在构造函数里进程级 setenv 一次,子进程继承,
+    //     不在 fork 后设置(fork+多线程下 setenv 非 async-signal-safe,可能死锁)。
 };
 
 /**
  * @class TcpMapSwitchNode
- * @brief TCP地图切换核心类
- *
- * 该类负责管理整个地图切换流程，包括：
- * - 启动TCP服务器监听客户端请求；
- * - 解析客户端发送的请求帧；
- * - 停止当前地图并启动目标地图；
- * - 坐标系转换与初始位姿发布；
- * - 与ROS系统通信（发布/订阅话题）。
+ * @brief TCP地图切换核心类(两阶段,C++ 直接拉起/杀死节点)
  */
 class TcpMapSwitchNode
 {
 public:
-    /**
-     * @brief 构造函数，初始化内部成员变量。
-     */
     TcpMapSwitchNode();
-
-    /**
-     * @brief 析构函数，释放资源并安全关闭TCP连接。
-     */
     ~TcpMapSwitchNode();
 
-    /**
-     * @brief 初始化节点参数、加载配置并创建TCP监听端口。
-     * @return true 表示初始化成功；false 表示失败。
-     */
     bool init();
-
-    /**
-     * @brief 启动TCP服务监听线程。
-     */
     void start();
-
-    /**
-     * @brief 停止TCP服务并关闭当前地图进程。
-     */
     void stop();
 
 private:
-    // ===== ROS相关成员 =====
-    ros::NodeHandle nh;                     ///< ROS节点句柄
-    bool isRunning_;                        ///< 主循环运行状态标志
+    // ===== ROS =====
+    ros::NodeHandle nh;
+    ros::Publisher initialpose_pub_;        ///< /initialpose 发布器
+    bool isRunning_;
 
-    // ===== 网络通信相关 =====
-    int sockfd_;                            ///< 客户端socket描述符
-    int listenfd_;                          ///< 监听socket描述符
-    int map_switch_PORT_;                   ///< TCP监听端口号
-    std::string server_addr_;               ///< TCP服务器IP地址
+    // ===== 网络 =====
+    int sockfd_;
+    int listenfd_;
+    int map_switch_PORT_;
+    std::string server_addr_;
 
-    std::thread tcpThread_;                 ///< TCP监听线程
-    std::mutex mutex_;                      ///< 通用互斥锁
-    std::mutex pidMutex_;                   ///< 地图进程PID互斥锁
+    std::thread tcpThread_;
+    std::mutex mutex_;
+    std::mutex pidMutex_;
+    std::atomic<bool> busy_{false};         ///< 切换进行中标志:为 true 时拒绝新的 LOAD/RELOC 指令
 
-    // ===== 地图管理相关 =====
-    pid_t currentMapPid;                    ///< 当前运行地图的进程PID
-    unsigned long current_map_id_;          ///< 当前激活的地图ID
-    std::map<unsigned long, MapInfo> maps_; ///< 所有可用地图信息表
+    // ===== 地图/进程管理 =====
+    std::vector<pid_t> loadPids_;           ///< 当前 LOAD 阶段 5 个节点的 PID
+    pid_t laserPid_;                        ///< 当前 laserMapping 的 PID
+    unsigned long current_map_id_;          ///< 当前已加载/激活的地图ID
+    unsigned long prev_map_id_;             ///< 本次切换前的源地图ID(供坐标变换 src 用)
+    std::map<unsigned long, MapInfo> maps_; ///< 地图信息表
 
-    // ===== 脚本路径配置 =====
-    std::string stop_script_path_;          ///< 停止地图的脚本路径
-    std::string initial_pose_script_path_;  ///< 发布初始位姿的脚本路径
+    // ===== 配置 =====
+    std::string pkg_pcd_dir_;               ///< fast_lio_global 包内 PCD 目录绝对路径
+    std::string python_path_;               ///< python 节点的 PYTHONPATH
+    bool use_coord_transform_;              ///< RELOC 初值来源:true=坐标变换换算 / false=固定电梯口锚点
+    int initial_map_id_;                    ///< 开机自动起栈的初始地图ID(<=0 表示用列表中第一张)
+    float initial_x_;                       ///< 开机起栈时的初始位姿X(机器人开机所在位置,不一定是0)
+    float initial_y_;                       ///< 开机起栈时的初始位姿Y
+    float initial_yaw_;                     ///< 开机起栈时的初始位姿yaw(弧度)
 
-    /**
-     * @brief 创建并绑定TCP监听socket。
-     * @return 成功返回socket描述符，失败返回-1。
-     */
+    // ===== 超时(秒) =====
+    double load_ready_timeout_;
+    double laser_alive_timeout_;
+    double reloc_total_timeout_;
+
     int createAndBindTcpSocket();
 
-    /**
-     * @brief 启动指定路径的地图启动脚本。
-     * @param scriptPath 脚本路径
-     * @return 启动的子进程PID。
-     */
-    pid_t startScript(const std::string& scriptPath);
+    // ===== 节点启停(C++ 直接管理进程) =====
+    pid_t launchNode(const NodeSpec& spec);              ///< fork + execvp(rosrun ...),返回 PID
+    void  killNode(pid_t pid);                           ///< 按进程组优雅(SIGINT)→强制(SIGKILL)杀死并回收
+    void  stopCurrentNodes();                            ///< 杀掉当前所有 load 节点与 laserMapping
+    std::vector<NodeSpec> buildLoadSpecs(const MapInfo& m) const;  ///< 构造 LOAD 阶段 5 个节点
+    NodeSpec buildLaserSpec() const;                     ///< 构造 laserMapping 节点
 
-    /**
-     * @brief 执行停止脚本，终止当前运行的地图。
-     * @return true 表示执行成功，false 表示失败。
-     */
-    bool executeStopScript();
-
-    /**
-     * @brief 发布初始位姿到ROS话题，用于重定位。
-     * @param x X坐标
-     * @param y Y坐标
-     * @param yaw 航向角（弧度）
-     */
-    void PublishInitialPose(float x, float y, float yaw);
-
-    /**
-     * @brief 执行地图间坐标转换。
-     * @param src 源地图下的坐标信息
-     * @param src_id 源地图ID
-     * @param dst_id 目标地图ID
-     * @return 转换后的目标地图坐标。
-     */
+    void publishInitialPoseMsg(float x, float y, float yaw);
+    /** 跨图坐标换算:把 src_id 地图系下的位姿换算到 dst_id 地图系。
+     *  仅当 use_coord_transform_=true 时启用(否则 RELOC 用固定电梯口锚点)。 */
     req_frame convertBetweenMaps(const req_frame& src, unsigned long src_id, unsigned long dst_id);
-
-    /**
-     * @brief 向客户端socket发送应答数据。
-     * @param client_fd 客户端socket描述符
-     * @param reply 应答数据结构
-     */
     void sendReplyOnSocket(int client_fd, const replay_frame& reply);
 
-    /**
-     * @brief 启动目标地图并进行坐标变换与重定位。
-     * @param target_map_id 目标地图ID
-     * @param req_seq 请求序列号
-     * @param x 坐标X
-     * @param y 坐标Y
-     * @param yaw 航向角
-     * @param client_fd 客户端socket描述符
-     */
-    void launchMap(unsigned long target_map_id, unsigned long req_seq, float x, float y, float yaw, int client_fd);
+    // ===== 两阶段 =====
+    bool doLoad(unsigned long target_map_id);
+    bool doReloc(float x, float y, float yaw);
+    void loadMap(unsigned long target_map_id, unsigned long req_seq, int client_fd);
+    void relocalize(unsigned long target_map_id, unsigned long req_seq, float x, float y, float yaw, int client_fd);
 
-    /**
-     * @brief 处理TCP数据接收与解析逻辑。
-     * @param listenfd 监听socket描述符
-     */
     void handleTcpData(int listenfd);
 };
-
