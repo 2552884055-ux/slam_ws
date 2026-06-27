@@ -1,16 +1,16 @@
-// TCP方式
+// Modbus TCP 方式电梯控制客户端实现
 #include "robot_elevator_client.hpp"
 
-// MODBUS RTU 构造函数
-RobotElevatorClient::RobotElevatorClient(const std::string& serial_port, int baudrate, int slave_id)
-    : m_controller(serial_port, baudrate, slave_id)  
+// 构造:通过 Modbus TCP 连接电梯控制器(IP、端口、从机ID)
+RobotElevatorClient::RobotElevatorClient(const std::string& ip, int port, int slave_id)
+    : m_controller(ip, port, slave_id)
 {
     if (!m_controller.connect()) {
-        throw std::runtime_error("无法连接到电梯控制器 (RTU)");
+        throw std::runtime_error("无法连接到电梯控制器 (Modbus TCP)");
     }
 }
 
-// 转换数字转字符串函数
+// 将楼层数字格式化为3字符字符串(如 1→"001"),与电梯控制器协议一致
 std::string formatFloor(int floor) {
     std::ostringstream ss;
     ss << std::setw(3) << std::setfill('0') << floor;
@@ -41,7 +41,7 @@ std::string formatFloor(int floor) {
 //     return true;
 // }
 // //乘梯到目标楼层并开门
-// bool RobotElevatorClient::rideToTargetFloorAndOpenDoor(int ToFloor) {
+// bool RobotElevatorClient::closeDoorLoadMapRideAndOpenDoor(int ToFloor) {
 //     std::string ToFloorStr = formatFloor(ToFloor);// 将int转为str
 
 //     std::cout << "关门..." << std::endl;
@@ -64,7 +64,7 @@ std::string formatFloor(int floor) {
 //     return true;
 // }
 // // 关门并切换地图 
-// bool RobotElevatorClient::closeDoorAndSwitchMap(const req_frame& request, const char* server_addr, int map_switch_PORT) {
+// bool RobotElevatorClient::closeDoorAndWaitMapThenReloc(const req_frame& request, const char* server_addr, int map_switch_PORT) {
 //     std::cout << "[电梯任务完成阶段] 开始关门..." << std::endl;
 
 //     if (!requestCloseDoorWithRetry()) {
@@ -179,9 +179,10 @@ std::string formatFloor(int floor) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// ==========================使用的函数============================== //
+// 召梯到出发层并开门:等电梯上线/激活 → 若不在目标层则召梯 → 等到达 → 开门
+// 返回 true 表示电梯已到达出发层且门已打开,机器狗可进梯
 bool RobotElevatorClient::callElevatorAndOpenDoor(int FromFloor) {
-    std::string FromFloorStr = formatFloor(FromFloor); // 将int转为str
+    std::string FromFloorStr = formatFloor(FromFloor);
 
     if (!waitElevatorOnlineAndActive()) {
         std::cerr << "[失败] 电梯激活超时" << std::endl; 
@@ -219,39 +220,57 @@ bool RobotElevatorClient::callElevatorAndOpenDoor(int FromFloor) {
     return true;
 }
 
-bool RobotElevatorClient::rideToTargetFloorAndOpenDoor(int ToFloor) {
-    std::string TromFloorStr = formatFloor(ToFloor);// 将int转为str
+// 机器狗已进梯:关门 → 非阻塞发 LOAD(目标层地图在乘梯期间后台加载) → 发乘梯指令
+//              → 等到达目标层(每20s重发乘梯指令,超时180s返回失败) → 开门
+// m_load_ok 由 SendLoad 回调在后台置位,供后续 closeDoorAndWaitMapThenReloc 使用
+bool RobotElevatorClient::closeDoorLoadMapRideAndOpenDoor(int ToFloor,
+                                                       unsigned long target_map,
+                                                       const char* server_addr,
+                                                       int map_switch_PORT) {
+    std::string TromFloorStr = formatFloor(ToFloor);
 
+    // 先关门确认机器狗已在梯内,再发 LOAD(避免在进梯过程中就开始预加载)
     std::cout << "关门..." << std::endl;
     if (!requestCloseDoorWithRetry()) {
         std::cerr << "[失败] 关门失败" << std::endl;
         return false;
     }
 
+    // 关门成功(机器狗已确认在梯内):非阻塞预加载目标层地图,乘梯期间后台加载
+    m_load_ok = false;
+    SendLoad(server_addr, map_switch_PORT, target_map,
+        [this](bool ok) { m_load_ok = ok; });
+
     if (!sendRideCommandWithRetry(TromFloorStr)) {
         std::cerr << "[失败] 楼层指令发送失败" << std::endl;
         return false;
     }
 
+    // 等待电梯到达目标楼层(每20s重新发送乘梯指令,最长等待 timeout_sec)
     std::cout << "等待电梯到达目标楼层..." << std::endl;
-    // waitElevatorArrives(TromFloorStr);
     const int retryIntervalSec = 20;
+    const int timeoutSec       = 180;
     auto lastRetryTime = std::chrono::steady_clock::now();
+    auto startTime     = std::chrono::steady_clock::now();
 
-    // 等待电梯到达目标楼层，每20s重新发送乘梯指令
     while (true) {
         auto status = m_controller.getElevatorStatus();
         if (status.currentFloor == TromFloorStr) {
-            std::cout << "电梯已到达" << std::endl;
+            std::cout << "电梯已到达目标楼层" << std::endl;
             break;
         }
 
         std::cout << "目标楼层: [" << TromFloorStr << "]，轿厢当前楼层: [" << status.currentFloor << "]" << std::endl;
 
-        // 当前时间
         auto now = std::chrono::steady_clock::now();
 
-        // 超过重发周期则重新发楼层指令
+        // 超时保护
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count() >= timeoutSec) {
+            std::cerr << "[失败] 等待电梯到达超时" << std::endl;
+            return false;
+        }
+
+        // 每隔 retryIntervalSec 重新发一次楼层指令
         if (std::chrono::duration_cast<std::chrono::seconds>(now - lastRetryTime).count() >= retryIntervalSec) {
             std::cout << "[重发] 发送楼层指令：" << TromFloorStr << std::endl;
             sendRideCommandWithRetry(TromFloorStr);
@@ -270,7 +289,13 @@ bool RobotElevatorClient::rideToTargetFloorAndOpenDoor(int ToFloor) {
     return true;
 }
 
-bool RobotElevatorClient::closeDoorAndSwitchMap(const req_frame& request, const char* server_addr, int map_switch_PORT) {
+// 机器狗已出梯:关门 → 断开电梯连接 → 等 m_load_ok(地图加载完成) → 阻塞发 RELOC 重定位
+// 若乘梯时间足够长,地图在出梯时已加载完毕,此处无需等待;
+// 若乘梯过短,最多等 60s(600×100ms),超时则返回失败。
+bool RobotElevatorClient::closeDoorAndWaitMapThenReloc(unsigned long target_map,
+                                                const char* server_addr,
+                                                int map_switch_PORT,
+                                                float x, float y, float yaw) {
     std::cout << "[电梯任务完成阶段] 开始关门..." << std::endl;
 
     if (!requestCloseDoorWithRetry()) {
@@ -283,21 +308,26 @@ bool RobotElevatorClient::closeDoorAndSwitchMap(const req_frame& request, const 
     m_controller.stopCommFlagThread();  // 关闭通信标志线程
     m_controller.disconnect();          // 断开连接
 
-    std::cout << "[开始切换地图]" << std::endl;
-    // 服务端地址和端口（地图切换的地址、端口）
-    replay_frame reply = SendMapSwitchRequest(request, server_addr, map_switch_PORT);
-    if (reply.seq == request.seq && reply.result) {
-        std::cout << "[地图切换成功]" << std::endl;
-        return true;
-    }else {
-        std::cout << "[地图切换失败]" << std::endl;
+    // 等地图加载完成(进梯时 SendLoad 已非阻塞发出,乘梯期间后台加载)
+    if (!m_load_ok) {
+        std::cout << "[等待地图加载完成...]" << std::endl;
+        for (int i = 0; i < 600 && !m_load_ok; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    }
+    if (!m_load_ok) {
+        std::cerr << "[地图加载失败或超时,无法重定位]" << std::endl;
         return false;
     }
+
+    // 地图已加载完成,发 RELOC(阻塞,返回是否成功)
+    return SendReloc(server_addr, map_switch_PORT, target_map, x, y, yaw);
 }
 
 
-// =========================== 重试逻辑 ===============================
+// =========================== 带重试的控制指令 ===============================
 
+// 发乘梯指令,等控制器回显 callFloor 确认后返回 true;超过重试次数返回 false
 bool RobotElevatorClient::sendRideCommandWithRetry(const std::string& floor, int retryLimit, int intervalMs) {
     for (int i = 0; i < retryLimit; ++i) {
         std::cout << "[第 " << (i + 1) << " 次发送乘梯指令：前往 " << floor << "]" << std::endl;
@@ -317,6 +347,7 @@ bool RobotElevatorClient::sendRideCommandWithRetry(const std::string& floor, int
     return false;
 }
 
+// 发开主门指令,等 mainDoorOpen 确认后返回 true;超过重试次数返回 false
 bool RobotElevatorClient::requestOpenMainDoorWithRetry(int retryLimit, int intervalMs) {
     for (int i = 0; i < retryLimit; ++i) {
         std::cout << "[第 " << (i + 1) << " 次发送开门指令]" << std::endl;
@@ -333,6 +364,7 @@ bool RobotElevatorClient::requestOpenMainDoorWithRetry(int retryLimit, int inter
     return false;
 }
 
+// 发关门指令,等 mainDoorOpen 为 false 确认后返回 true;超过重试次数返回 false
 bool RobotElevatorClient::requestCloseDoorWithRetry(int retryLimit, int intervalMs) {
     for (int i = 0; i < retryLimit; ++i) {
         std::cout << "[第 " << (i + 1) << " 次发送关门指令]" << std::endl;
@@ -351,6 +383,7 @@ bool RobotElevatorClient::requestCloseDoorWithRetry(int retryLimit, int interval
 
 // =========================== 等待逻辑 ===============================
 
+// 连接电梯控制器并启动通信保持线程,等电梯上线(isOnline)且激活(isActive),超时返回 false
 bool RobotElevatorClient::waitElevatorOnlineAndActive(int timeout_sec) {
     if (!m_controller.connect()) {
         throw std::runtime_error("无法连接电梯控制器");
@@ -377,6 +410,7 @@ bool RobotElevatorClient::waitElevatorOnlineAndActive(int timeout_sec) {
 }
 
 
+// 轮询 currentFloor 直到电梯到达指定层,超时返回 false
 bool RobotElevatorClient::waitElevatorArrives(const std::string& floor, int timeout_sec) {
     auto start = std::chrono::steady_clock::now();
 

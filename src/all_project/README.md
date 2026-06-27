@@ -153,7 +153,9 @@ all_project/
 ├── launch/
 │   └── project.launch      # 整体工程入口:加载全局参数 + 静态 TF + map_switch_node + p2l + rviz
 │                           #   各层定位节点由 map_switch_node 运行时 rosrun 拉起(不再用 .sh/.launch)
-├── example/                # 上位机调用示例(map_switch_client.hpp/.cpp)
+├── example/                # 上位机地图切换示例(不依赖 ROS,纯 socket)
+│   ├── map_switch_client.hpp   # header-only 接口:SendLoad(非阻塞)+SendReloc(阻塞)
+│   └── map_switch_client.cpp   # 单次完整切换演示:发 LOAD→延时→发 RELOC
 ├── map_switch/             # 节点1:楼层切换(按职责拆分)
 │   ├── include/{protocol.hpp, tcp_server.hpp, node_launcher.hpp, map_switch_node.hpp}
 │   └── src/{map_switch.cpp(main), map_switch_node.cpp, tcp_server.cpp, node_launcher.cpp}
@@ -173,7 +175,7 @@ cd ~/slam_ws && catkin_make && source devel/setup.bash
 roslaunch all_project project.launch
 
 # 或单独运行
-rosrun all_project map_switch     # 楼层切换 TCP 服务
+rosrun all_project map_switch     # 楼层切换 TCP 服务(监听 :6050)
 rosrun all_project tf_publish     # 状态 UDP 上报
 ```
 
@@ -183,9 +185,21 @@ rosrun all_project tf_publish     # 状态 UDP 上报
 - 各被拉起节点所属包（`pcl_ros`、`map_server`、`fast_lio_global`、`all_project`）已编译/可被 rosrun 找到；
 - 切换依赖的 `/waiting_for_initial_pose`、`/map_to_odom_flag` 话题存在。
 
+### 上位机调用
+
+上位机通过 TCP 向 `map_switch` 节点发送两阶段切换指令：
+
+- **C++ 接口**：`example/map_switch_client.hpp`（header-only，无需 ROS）：
+  - `SendLoad(addr, port, map_id, cb)`：非阻塞发 CMD_LOAD，地图加载完成时回调 `cb(ok)`
+  - `SendReloc(addr, port, map_id, x, y, yaw)`：阻塞发 CMD_RELOC，等重定位完成返回 bool
+  - `example/map_switch_client.cpp`：单次完整切换演示——发 LOAD → `sleep` 模拟乘梯 → 等 LOAD 成功 → 发 RELOC
+  - 编译：`g++ -std=c++11 map_switch_client.cpp -o run -pthread`，运行一次即完成一次地图切换
+- **电梯控制集成**：见 `ElevatorControl_RTU` / `ElevatorControl_TCP`，已封装完整乘梯 + 换层流程（Modbus RTU/TCP + 三步函数）：`callElevatorAndOpenDoor` → `closeDoorLoadMapRideAndOpenDoor` → `closeDoorAndWaitMapThenReloc`
+
 ---
 
 ## 5. 依赖
 
 - catkin：`roscpp`、`roslib`、`rospy`、`std_msgs`、`geometry_msgs`、`nav_msgs`、`sensor_msgs`、`tf`、`pcl_ros`、`eigen_conversions`
 - 系统库：`CURL`、`yaml-cpp`、`OpenCV`（已 find_package，部分当前未强链接）
+- 上位机电梯控制：`libmodbus`（`ElevatorControl_RTU/TCP` 依赖，`sudo apt install libmodbus-dev`）

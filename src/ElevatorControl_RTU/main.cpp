@@ -1,44 +1,63 @@
-// RTU方式
-#include "robot_elevator_client.hpp" 
+// Modbus RTU 方式电梯控制 + 两阶段地图切换
+//
+// 乘梯 + 换层完整流程：
+//   步骤1  导航到候梯点 → callElevatorAndOpenDoor    召梯、等到达、开门，机器狗进梯
+//   步骤2  机器狗进梯后 → closeDoorLoadMapRideAndOpenDoor
+//              关门 → 非阻塞发 LOAD(目标层地图在乘梯期间后台加载)
+//              → 发乘梯指令 → 等到达目标层 → 开门，机器狗出梯
+//   步骤3  机器狗出梯后 → closeDoorAndWaitMapThenReloc
+//              关门 → 等地图加载完成(若乘梯够长则无需等待)
+//              → 发 RELOC(重定位) → 切换完成，可继续巡检
 
-// 乘梯步骤：
-// 1.导航到达候梯点，发送第一次召梯指令来接机器狗
-// 2.电梯到达后，发送开门指令
-// 3.机器狗完全进入电梯后，发送关门指令
-// 4.关门后，再次发送召梯指令，前往目标楼层
-// 5.等待电梯运行，电梯到达目标楼层后发送开门指令
-// 6.开门后走出电梯，完全走出电梯后，发送电梯关门指令
-// 7.执行地图切换指令，等待切换完成后继续巡检任务
+#include "robot_elevator_client.hpp"
 
-// 测试召梯等一系列功能，模拟乘梯流程
 int main() {
     try {
+        // 串口参数:设备、波特率、校验位、数据位、停止位、从机ID
         RobotElevatorClient client("/dev/ttyUSB0", 9600, 'N', 8, 1, 1);
 
-        client.callElevatorAndOpenDoor(1);          // 设置机器狗出发楼层，成功开门返回Ture，然后进梯
-    
-        // 延时10秒模拟机器狗进电梯动作
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-    
-        client.rideToTargetFloorAndOpenDoor(2);     // 设置机器狗目标楼层，成功开门返回Ture，然后出梯
-    
-        // 延时10秒模拟机器狗出电梯动作
+        const char* server_addr     = "192.168.2.100";   // 地图切换服务(all_project map_switch 节点)IP
+        const int   map_switch_PORT = 6050;               // 地图切换服务端口
+        const int   from_floor      = 1;                  // 出发楼层
+        const int   to_floor        = 2;                  // 目标楼层
+        const unsigned long target_map = map2;            // 目标地图ID(对应 floors.yaml 的 id)
+
+        // 步骤1:召梯到出发层并开门,等机器狗完全进入电梯
+        if (!client.callElevatorAndOpenDoor(from_floor)) {
+            std::cerr << "[失败] 召梯或开门失败" << std::endl;
+            return 1;
+        }
+        // 等机器狗完全进入电梯(实际由导航到位事件驱动,此处用延时占位)
         std::this_thread::sleep_for(std::chrono::seconds(5));
 
-        // client.requestCloseDoorWithRetry();          // 关门   
-        // client.stopCommFlagThread();  // 关闭通信标志线程
-        // client.disconnect();          // 断开连接
+        // 步骤2:关门 + 发乘梯指令 + 同步非阻塞预加载目标层地图(利用乘梯时间后台加载)
+        if (!client.closeDoorLoadMapRideAndOpenDoor(
+            to_floor, target_map, server_addr, map_switch_PORT)) {
+            std::cerr << "[失败] 乘梯或到达目标层失败" << std::endl;
+            return 1;
+        }
+        // 等机器狗完全走出电梯(实际由导航到位事件驱动,此处用延时占位)
+        std::this_thread::sleep_for(std::chrono::seconds(5));
 
-        req_frame request;
-        request.frame_type = map1; 
-        request.seq = 1;  // 序列号
-        request.x = 0;
-        request.y = 0;
-        request.yaw = 0;
-        client.closeDoorAndSwitchMap(request, "192.168.110.20", 7001);  // 乘梯完成并切换地图
+        // 步骤3:关门 + 等地图加载完成 + 发 RELOC 重定位
+        // x/y/yaw:机器人在源图坐标系下的位姿,始终需要传入;
+        //   服务端 use_coord_transform=false 时不使用该值(改用 floors.yaml 各层锚点),
+        //   服务端 use_coord_transform=true  时将其换算到目标图作为重定位初值。
+        float reloc_x   = 1.0f;
+        float reloc_y   = 2.0f;
+        float reloc_yaw = 3.0f;
+        if (!client.closeDoorAndWaitMapThenReloc(
+            target_map, server_addr, map_switch_PORT,               
+            reloc_x, reloc_y, reloc_yaw)) {
+            std::cerr << "[失败] 地图切换失败" << std::endl;
+            return 1;
+        }
+
+        std::cout << "[完成] 乘梯 + 地图切换全部成功" << std::endl;
 
     } catch (const std::exception& e) {
         std::cerr << "[异常] " << e.what() << std::endl;
+        return 1;
     }
 
     return 0;
