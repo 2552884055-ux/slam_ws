@@ -60,19 +60,32 @@ sudo apt install -y gimp language-pack-gnome-zh-hant language-pack-gnome-zh-hans
 
 ## 三、src 目录结构说明
 
-- **FAST_LIO_GLOBAL/**  
-  基于激光雷达和 IMU 的高性能前端里程计与建图算法。  
-  主要功能：实现激光-IMU紧耦合的实时定位与建图，支持点云去畸变、IMU预积分、状态估计、回环检测、多楼层地图切换与巡检等。适合机器人自主导航和多楼层环境下的高精度定位。主要模块包括：IMU 预处理、点云去畸变、滤波器状态估计、地图管理、重定位等。
+- **FAST_LIO_GLOBAL/**
+  基于激光雷达和 IMU 的高性能前端里程计与建图算法（FAST-LIO2 扩展）。
+  主要功能：激光-IMU 紧耦合的实时定位与建图，支持点云去畸变、状态估计、先验地图全局重定位；并新增**毫米波雷达多普勒自速度紧耦合融合**，抑制管廊/长走廊等退化场景沿轴向的漂移。
 
-- **livox_ros_driver2/**  
-  Livox 官方激光雷达 ROS 驱动包。  
+- **radar_ego_velocity/**
+  毫米波雷达（SR71）自速度估计模块。
+  主要功能：解析雷达目标（串口 / CAN），用 RANSAC + 最小二乘估计雷达系自速度，发布 `/radar_velocity`，供 FAST_LIO_GLOBAL 融合。
+  注意：SR71 的串口/CAN 协议解析当前仍是占位 TODO，需按厂家协议补全后才能产出真实数据。
+
+- **livox_ros_driver2/**
+  Livox 官方激光雷达 ROS 驱动包。
   主要功能：采集 Livox 系列雷达的原始点云和 IMU 数据，并发布为 ROS 消息（如 /livox/lidar、/livox/imu），供下游 SLAM、建图、感知等模块使用。支持多种 Livox 设备和多话题输出，适合高性能实时应用。
 
-- **map_switch/**  
-  多楼层/多区域地图切换与管理模块。  
-  主要功能：实现机器人跨楼层或多区域时的地图文件切换、初始位姿重定位等，保证机器人在不同楼层/区域间无缝切换地图和定位。通常包含地图切换服务、初始位姿发布等功能。
+- **all_project/**（原 map_switch）
+  多楼层/多区域地图切换与状态上报模块，编出 `map_switch`、`tf_publish` 两个可执行。
+  主要功能：机器人跨楼层/多区域时的两阶段地图切换（进电梯预加载 / 出电梯重定位，TCP 控制），以及机器人位姿与障碍距离的 UDP 上报。
 
-- **octomap_mapping/**  
+- **goalsender/**
+  里程计位姿 UDP 上报节点。
+  主要功能：缓存 `/Odometry` 最新位姿，通过 UDP 请求-响应协议按需把机器人 (x,y,z,yaw) 回发给上位机/调度系统。
+
+- **rtsp_stream/**
+  远程监看推流模块。
+  主要功能：把 RViz/建图画面（屏幕抓取）或 ROS 图像话题经 FFmpeg 推到 mediamtx，提供 RTSP / WebRTC 远程观看。
+
+- **octomap_mapping/**
   基于 OctoMap 的三维栅格地图构建模块。  
   主要功能：将点云数据转换为八叉树结构的三维占据栅格地图（OctoMap），常用于三维环境建图、路径规划和避障。支持地图保存、加载、可视化等。
 
@@ -125,8 +138,9 @@ sudo apt install -y gimp language-pack-gnome-zh-hant language-pack-gnome-zh-hans
 2. 启动整体工程
    ```bash
    source ./devel/setup.bash
-   roslaunch map_switch project.launch
+   roslaunch all_project project.launch
    ```
+   > 注意：楼层切换包已重构改名为 `all_project`（旧名 `map_switch` 现为包内可执行）；`auto_start.sh` 已同步用 `roslaunch all_project project.launch`。
 
 ---
 

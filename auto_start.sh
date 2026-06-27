@@ -11,7 +11,7 @@ xfce4-terminal --title="Livox Driver" --hold -e "bash -c 'source ./devel/setup.b
 sleep 5
 
 # 启动地图定位模块（在新终端打开，并保持终端窗口）
-xfce4-terminal --title="Map Switch" --hold -e "bash -c 'source ./devel/setup.bash; roslaunch map_switch project.launch'" &
+xfce4-terminal --title="Map Switch" --hold -e "bash -c 'source ./devel/setup.bash; roslaunch all_project project.launch'" &
 
 # 自启动脚本
 

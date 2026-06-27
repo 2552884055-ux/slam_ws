@@ -73,7 +73,7 @@ pip3 install open3d ros_numpy
 ```
 
 ### 3.4 外部 ROS 包（launch 中引用，按需提供）
-`pointcloud_to_laserscan`、`map_server`、`pcl_ros`，以及私有包 `map_switch` / `pointcloud_tf`（位置 Socket 上报）。若不需要 2D 建图/上报，可在 launch 中关闭对应 `arg`。
+`pointcloud_to_laserscan`、`map_server`、`pcl_ros`，以及本工作空间内的 `all_project`（楼层切换 `map_switch` + 位姿/激光 UDP 上报 `tf_publish`）。若不需要 2D 建图/上报，可在 launch 中关闭对应 `arg`。
 
 ### 3.5 编译
 ```bash

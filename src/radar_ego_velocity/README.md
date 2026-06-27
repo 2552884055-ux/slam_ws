@@ -5,11 +5,15 @@
 ## 链路
 
 ```
-SR71 (串口/TTL)
+SR71 (串口/TTL 或 CAN)
   └─ sr71_serial_node ──/radar_scan──► radar_ego_velocity_node ──/radar_velocity──►  FAST-LIO
-     (解析串口帧)       (RadarScan)    (RANSAC+最小二乘估自速度)   (TwistStamped)    (紧耦合EKF更新)
+     (解析雷达帧)       (RadarScan)    (RANSAC+最小二乘估自速度)   (TwistStamped)    (紧耦合EKF更新)
 ```
-> SR71 用串口(TTL)接入,驱动节点为 `sr71_serial_node`。若改用 CAN 接口,另有 `sr71_can_node` 备用。
+> SR71 用串口(TTL)接入,驱动节点为 `sr71_serial_node`;改用 CAN 接口则用 `sr71_can_node`。
+>
+> ⚠️ **驱动层协议解析当前是占位 TODO**:`sr71_serial_node` / `sr71_can_node` 的串口/CAN 打开与读循环框架已就绪,但帧解析函数(`parseBuffer`/`parseTarget`/`parseHeader`)尚未按厂家协议实现,默认**不会产出有效 `RadarTarget`**。未补全前 `/radar_scan` 无目标、`/radar_velocity` 无输出。可先用 `test/scripts/` 下的仿真脚本(见末节)验证融合链路。
+>
+> `radar_ego_velocity_node`(RANSAC 自速度估计)本身已完整实现,只要喂入有效 `/radar_scan` 即可工作。
 
 - 雷达**不直接**进 FAST-LIO,先估出**雷达系自速度**(对地速度),再作为速度观测融合;
 - 融合点在 `laserMapping.cpp` 激光 IESKF 更新**之后**:`fuse_radar_velocity()`;
@@ -18,11 +22,11 @@ SR71 (串口/TTL)
 ## 编译
 
 ```bash
-cd ~/Desktop/slam_ws/slam_ws
+cd ~/slam_ws
 catkin_make            # 或 catkin build
 source devel/setup.bash
 ```
-> Windows 开发机上 `sr71_can_node`(SocketCAN)不会编译,只编译估计节点;实机请在 Linux 上编译运行。
+> `sr71_serial_node`(POSIX termios 串口)与 `sr71_can_node`(SocketCAN)**仅在 Linux 下编译**;非 Linux 开发机只能编译/查看 `radar_ego_velocity_node`,实机请在 Linux 上编译运行。
 
 ## 运行
 
@@ -37,11 +41,11 @@ roslaunch radar_ego_velocity mapping_mid360_with_radar.launch
 
 ## 必须完成的两处标定/适配
 
-1. **串口协议解析** —— 打开 `src/sr71_serial_node.cpp`,按纳雷《SR71 串口通信协议文档》补全:
+1. **串口/CAN 协议解析（当前为占位 TODO，必须先补全）** —— 打开 `src/sr71_serial_node.cpp`(或 `src/sr71_can_node.cpp`),按纳雷《SR71 通信协议文档》补全:
    - 帧格式常量 `FRAME_HEAD0/1`、`TARGET_BYTES`、帧长计算、校验;
-   - `parseTarget()` 里方位角/距离/多普勒的字节偏移与缩放系数;
+   - `parseTarget()`/`parseHeader()` 里方位角/距离/多普勒的字节偏移与缩放系数(现在 `parseTarget()` 直接 `return false`);
    - launch 里 `port`(如 `/dev/ttyUSB0`)和 `baudrate`。
-   这是唯一无法预先写死的部分。
+   这是唯一无法预先写死、且**未实现前整条实机链路不通**的部分。
 
 2. **雷达外参 + 多普勒符号**
    - `config/mid360.yaml` 的 `radar/extrinsic_T`、`extrinsic_R`:雷达相对 IMU 的位置和姿态
@@ -49,7 +53,10 @@ roslaunch radar_ego_velocity mapping_mid360_with_radar.launch
    - `radar_ego_velocity.launch` 的 `doppler_sign`:载体朝雷达视线方向前进时,
      输出速度应指向正前方;若方向反了,把 `1.0` 改成 `-1.0`。
 
-## 关键参数(config/mid360.yaml → radar:)
+## 关键参数(融合侧,位于 `fast_lio_global/config/mid360.yaml` → radar:)
+
+> 下列融合参数属于 **FAST_LIO_GLOBAL** 包(消费 `/radar_velocity` 的一侧),不在本包内;本包 launch 只配 RANSAC 估计相关参数(`doppler_sign`、`ransac_iter`、`inlier_thresh`、`min/max_range`、`max_speed` 等)。
+
 
 | 参数 | 含义 |
 |------|------|
@@ -67,6 +74,14 @@ FAST-LIO 输出已可作为 EGO 输入,在 EGO 的 launch 里重映射:
 <remap from="<EGO的cloud话题>" to="/cloud_registered"/>
 ```
 注意坐标系(`camera_init`/`body`)与 EGO 期望的 frame_id 对齐;`/Odometry` 的 twist 已填世界系速度。
+
+## 仿真验证（无实机 / 驱动未补全时）
+
+在 SR71 协议解析补全前,可用 `test/scripts/` 下的脚本离线验证融合链路(脚本分类见 `test/` 子目录):
+
+- `radar_vel_synth.py` —— 合成 `/radar_velocity`,绕过真实雷达驱动直接喂 FAST-LIO;
+- `lidar_degrade.py` —— 人为制造激光退化,复现轴向漂移;
+- `sim_corridor.py` —— 模拟管廊场景。
 
 ## 验证退化效果
 
