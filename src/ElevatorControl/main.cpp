@@ -18,9 +18,9 @@ int main() {
     try {
         // ===== 电梯连接方式：二选一 =====
         // 【TCP】电梯控制器 IP、Modbus TCP 端口、从机ID
-        RobotElevatorClient client("127.0.0.1", 8000, 1);
-        // 【RTU】串口设备、波特率、校验位、数据位、停止位、从机ID
-        // RobotElevatorClient client("/dev/ttyUSB0", 9600, 'N', 8, 1, 1);
+        // RobotElevatorClient client("127.0.0.1", 8000, 1);
+        // 【RTU】空字符串=自动识别串口
+        RobotElevatorClient client("", 9600, 'N', 8, 1, 1);
 
         const char* server_addr     = "127.0.0.1";       // 地图切换服务(all_project map_switch 节点)IP；本机联调对接 map_switch_sim
         const int   map_switch_PORT = 6050;               // 地图切换服务端口

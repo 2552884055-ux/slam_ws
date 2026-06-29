@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <atomic>
 #include <fcntl.h>
+#include <glob.h>
 
 constexpr int MAX_RETRY = 100;                  // 最大重试次数
 constexpr int RETRY_INTERVAL_MS_TCP = 1000;     // TCP 重试间隔(网络往返,较大)
@@ -42,6 +43,7 @@ private:
 
     std::mutex commFlagMutex;
     std::mutex modbusMutex;
+    std::mutex m_reconnMutex;   // 序列化重连，防止多线程同时重建 m_ctx
     bool commFlagRunning = false;
     std::thread commFlagThread;
     int commCounter = 0;
@@ -92,4 +94,14 @@ public:
     int readHoldingRegisters(int addr, int nb, uint16_t *dest); // 保持寄存器 (40001~)
     int writeRegister(int addr, uint16_t value);                // 写单寄存器
     int writeRegisters(int addr, int nb, const uint16_t *data); // 写多个寄存器
+
+    // 自动探测：扫描 /dev/ttyUSB*，对每个设备发一次 Modbus 读探测，
+    // 返回第一个能正常响应的设备路径；未找到则返回空字符串。
+    static std::string detectRtuDevice(int baudrate = 9600, char parity = 'N',
+                                       int data_bits = 8, int stop_bits = 1,
+                                       int slave_id = 1);
+
+    // RTU 模式下探测当前连接是否正常；无响应时自动重新扫描串口并重连。
+    // TCP 模式直接返回 true。返回 false 表示重探测也失败。
+    bool ensureRtuConnected();
 };

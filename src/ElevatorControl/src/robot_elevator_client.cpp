@@ -206,7 +206,7 @@ bool RobotElevatorClient::closeDoorAndWaitMapThenReloc(unsigned long target_map,
     std::cout << "[电梯任务完成阶段] 开始关门..." << std::endl;
 
     if (!requestCloseDoorWithRetry()) {
-        throw std::runtime_error("关门失败");
+        std::cerr << "[失败] 关门失败" << std::endl;
         return false;
     }
 
@@ -290,11 +290,9 @@ bool RobotElevatorClient::requestCloseDoorWithRetry(int retryLimit, int interval
 
 // =========================== 等待逻辑 ===============================
 
-// 连接电梯控制器并启动通信保持线程,等电梯上线(isOnline)且激活(isActive),超时返回 false
+// 启动通信保持线程,等电梯上线(isOnline)且激活(isActive),超时返回 false
+// 构造时已完成连接，此处只需启动心跳线程
 bool RobotElevatorClient::waitElevatorOnlineAndActive(int timeout_sec) {
-    if (!m_controller.connect()) {
-        throw std::runtime_error("无法连接电梯控制器");
-    }
     m_controller.startCommFlagThread();
 
     auto start = std::chrono::steady_clock::now();
