@@ -147,7 +147,7 @@ sudo usermod -aG dialout $USER        # 加入 dialout 组(重新登录生效); 
 ./elevator_sim --tcp 127.0.0.1 8000
 
 # 终端2：地图切换模拟服务端  [port] [load耗时s] [reloc耗时s]
-./map_switch_sim 6050 5 3
+./map_switch_sim 6050 15 5
 
 # 终端3：运行 main
 cd ../../ElevatorControl_TCP && mkdir -p build && cd build && cmake .. && make

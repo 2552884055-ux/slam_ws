@@ -11,7 +11,7 @@ static replay_frame sendRequest(const req_frame& request, const char* server_add
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
-        std::cerr << "Failed to create socket" << std::endl;
+        std::cerr << "创建 socket 失败" << std::endl;
         return reply;
     }
 
@@ -26,13 +26,13 @@ static replay_frame sendRequest(const req_frame& request, const char* server_add
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
     if (inet_pton(AF_INET, server_addr, &serverAddr.sin_addr) <= 0) {
-        std::cerr << "Invalid address or address not supported" << std::endl;
+        std::cerr << "地址无效或不支持" << std::endl;
         close(sockfd);
         return reply;
     }
 
     if (connect(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-        std::cerr << "Connection failed" << std::endl;
+        std::cerr << "连接失败" << std::endl;
         close(sockfd);
         return reply;
     }
@@ -43,14 +43,14 @@ static replay_frame sendRequest(const req_frame& request, const char* server_add
     while (sent < sizeof(request)) {
         ssize_t n = send(sockfd, p + sent, sizeof(request) - sent, 0);
         if (n <= 0) {
-            std::cerr << "Send failed" << std::endl;
+            std::cerr << "发送失败" << std::endl;
             close(sockfd);
             return reply;
         }
         sent += static_cast<size_t>(n);
     }
-    std::cout << "Request sent successfully" << std::endl;
-    std::cout << "Waiting for the map switch to be completed..." << std::endl;
+    std::cout << "请求发送成功..." << std::endl;
+    std::cout << "等待重定位完成..." << std::endl;
 
     // 接收回执(循环收满,抗半包)
     char* r = reinterpret_cast<char*>(&reply);
@@ -58,13 +58,13 @@ static replay_frame sendRequest(const req_frame& request, const char* server_add
     while (got < sizeof(reply)) {
         ssize_t n = recv(sockfd, r + got, sizeof(reply) - got, 0);
         if (n < 0) {
-            std::cerr << "Receive reply failed: " << strerror(errno) << std::endl;
+            std::cerr << "接收回执失败: " << strerror(errno) << std::endl;
             reply.result = false;
             close(sockfd);
             return reply;
         }
         if (n == 0) {
-            std::cerr << "Server closed the connection" << std::endl;
+            std::cerr << "服务端关闭了连接" << std::endl;
             reply.result = false;
             close(sockfd);
             return reply;

@@ -469,17 +469,21 @@ int main(int argc, char** argv) {
             modbus_mapping_free(mb); modbus_free(g_ctx);
             return 1;
         }
-        std::cout << "[串口] 已就绪，等待上位机请求..." << std::endl;
+        // 给 modbus_receive 设等待请求(indication)超时,使其每 0.5s 返回一次,
+        // 否则它会无限阻塞在串口读上,Ctrl-C(SIGINT)只置位 g_running 却无法被检查到,
+        // 导致程序退不出。设了超时后,循环能周期性检查 g_running 并优雅退出。
+        modbus_set_indication_timeout(g_ctx, 0, 500000);
+
+        std::cout << "[串口] 已就绪，等待上位机请求...(Ctrl-C 退出)" << std::endl;
         uint8_t query[MODBUS_RTU_MAX_ADU_LENGTH];
         while (g_running) {
             int rc = modbus_receive(g_ctx, query);
             if (rc > 0) {
                 std::lock_guard<std::mutex> lk(mtx);
                 modbus_reply(g_ctx, query, rc, mb);
-            } else if (rc == -1 && errno != EMBBADCRC) {
-                // 串口下偶发 CRC/超时错误可忽略并继续
-                if (!g_running) break;
             }
+            // rc == -1 时多为等待超时(ETIMEDOUT)或偶发 CRC 错误,忽略并回到循环顶部
+            // 重新检查 g_running;真正的退出由 SIGINT 把 g_running 置 false 触发。
         }
     }
 
