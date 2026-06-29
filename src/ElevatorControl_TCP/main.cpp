@@ -387,13 +387,16 @@
 int main() {
     try {
         // TCP 参数:电梯控制器 IP、Modbus TCP 端口、从机ID
-        RobotElevatorClient client("192.168.110.221", 8000, 1);
+        RobotElevatorClient client("127.0.0.1", 8000, 1);   // 本机联调:对接 ElevatorSimulator (./elevator_sim --tcp 127.0.0.1 8000)
 
-        const char* server_addr     = "192.168.2.100";   // 地图切换服务(all_project map_switch 节点)IP
+        const char* server_addr     = "127.0.0.1";       // 地图切换服务(all_project map_switch 节点)IP；本机联调对接 map_switch_sim
         const int   map_switch_PORT = 6050;               // 地图切换服务端口
         const int   from_floor      = 1;                  // 出发楼层
         const int   to_floor        = 2;                  // 目标楼层
         const unsigned long target_map = map2;            // 目标地图ID(对应 floors.yaml 的 id)
+
+        // 步骤0:读取并打印全部寄存器(调试观察:确认与电梯通信正常、各寄存器取值)
+        client.dumpAllRegisters();
 
         // 步骤1:召梯到出发层并开门,等机器狗完全进入电梯
         if (!client.callElevatorAndOpenDoor(from_floor)) {

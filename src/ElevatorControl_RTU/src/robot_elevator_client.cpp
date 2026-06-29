@@ -14,6 +14,37 @@ std::string formatFloor(int floor) {
     return ss.str();
 }
 
+// 读取并打印全部寄存器(输入寄存器 + 保持寄存器, 地址 0~14),并解析关键状态,便于调试
+void RobotElevatorClient::dumpAllRegisters() {
+    constexpr int N = 15;  // 协议地址范围 0~14 (30001~300015 / 40001~40015)
+    uint16_t in[N]   = {0};
+    uint16_t hold[N] = {0};
+    m_controller.readInputRegisters(0, N, in);
+    m_controller.readHoldingRegisters(0, N, hold);
+
+    auto printReg = [](const char* tag, int i, uint16_t v) {
+        std::string bin = std::bitset<16>(v).to_string();
+        bin.insert(8, " ");  // 高/低字节分隔
+        std::cout << "  " << tag << "[" << std::setw(2) << i << "] = 0x"
+                  << std::hex << std::setw(4) << std::setfill('0') << v
+                  << std::dec << std::setfill(' ')
+                  << "  (" << bin << ")" << std::endl;
+    };
+
+    std::cout << "\n===== 全部寄存器 (地址 0~14) =====" << std::endl;
+    std::cout << "[输入寄存器 30001~ / 电梯公共数据表]" << std::endl;
+    for (int i = 0; i < N; ++i) printReg("IR", i, in[i]);
+    std::cout << "[保持寄存器 40001~ / 机器人乘梯数据表]" << std::endl;
+    for (int i = 0; i < N; ++i) printReg("HR", i, hold[i]);
+
+    auto s = m_controller.getElevatorStatus();
+    std::cout << "[解析] 投用=" << s.isActive << " 在线=" << s.isOnline
+              << " 主门开=" << s.mainDoorOpen << " 副门开=" << s.viceDoorOpen
+              << " 上行=" << s.isUpward << " 下行=" << s.isDownward
+              << " 当前层=" << s.currentFloor << " 召梯层=" << s.callFloor << std::endl;
+    std::cout << "==================================\n" << std::endl;
+}
+
 // 召梯到出发层并开门:等电梯上线/激活 → 若电梯不在目标层则召梯 → 等到达 → 开门
 // 返回 true 表示电梯已到达出发层且门已打开,机器狗可进梯
 bool RobotElevatorClient::callElevatorAndOpenDoor(int FromFloor) {

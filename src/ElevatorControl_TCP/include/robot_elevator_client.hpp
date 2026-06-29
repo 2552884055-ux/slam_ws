@@ -19,6 +19,9 @@ public:
     // 构造:初始化 Modbus TCP 连接(IP、端口、从机ID)
     RobotElevatorClient(const std::string& ip, int port = 8000, int slave_id = 1);
 
+    // 读取并打印全部寄存器(输入寄存器+保持寄存器, 地址 0~14),含状态解析,便于调试观察
+    void dumpAllRegisters();
+
     // 召梯到出发层并开门,等机器狗进入电梯后由上层调用下一步
     bool callElevatorAndOpenDoor(int FromFloor);
 

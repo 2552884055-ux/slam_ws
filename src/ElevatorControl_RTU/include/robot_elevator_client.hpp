@@ -12,6 +12,7 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include <bitset>
 #include <atomic>
 
 class RobotElevatorClient {
@@ -19,6 +20,9 @@ public:
     // 构造:初始化串口 Modbus 连接(设备路径、波特率、校验位、数据位、停止位、从机ID)
     RobotElevatorClient(const std::string& device, int baudrate, char parity,
                         int data_bits, int stop_bits, int slave_id);
+
+    // 读取并打印全部寄存器(输入寄存器+保持寄存器, 地址 0~14),含状态解析,便于调试观察
+    void dumpAllRegisters();
 
     // 召梯到出发层并开门,等机器狗进入电梯后由上层调用下一步
     bool callElevatorAndOpenDoor(int FromFloor);
