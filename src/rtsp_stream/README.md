@@ -55,7 +55,8 @@
 
 ```bash
 sudo apt-get update && sudo apt-get install ffmpeg
-pip3 install opencv-python mss          # rtsp_server.py / rviz_capture.py
+sudo apt-get install ros-noetic-cv-bridge    # rtsp_server.py / rviz_capture.py 依赖(随 ROS 提供 rospy/sensor_msgs)
+pip3 install opencv-python mss                # rtsp_server.py / rviz_capture.py
 # 另需 mediamtx 二进制（流媒体网关）：
 #   https://github.com/bluenviron/mediamtx/releases
 ```

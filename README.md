@@ -2,7 +2,7 @@
 
 面向 **管廊 / 隧道 / 长走廊 / 多楼层** 等激光退化场景的无人机 / 巡检机器人定位与建图工作空间（catkin / ROS Noetic）。
 
-核心思路：在 FAST-LIO2 激光惯性里程计的基础上，引入 **毫米波雷达多普勒自速度** 作为速度观测，紧耦合补偿激光沿轴向的退化漂移；并在此之上提供 **先验地图全局重定位、多楼层地图切换、2D 栅格建图、位置 Socket 上报、RTSP 远程监看、开机/按键/端口自启动** 等一整套工程化能力。
+核心思路：在 FAST-LIO2 激光惯性里程计的基础上，引入 **毫米波雷达多普勒自速度** 作为速度观测，紧耦合补偿激光沿轴向的退化漂移；并在此之上提供 **先验地图全局重定位、多楼层地图切换、跨楼层乘梯（Modbus 电梯控制 + 两阶段地图切换）、2D 栅格建图、位置 Socket 上报、RTSP 远程监看、开机/按键/端口自启动** 等一整套工程化能力。
 
 > 本仓库是一个完整的产品级工作空间，不仅含算法核心（FAST_LIO_GLOBAL），还包含驱动、地图转换、楼层切换、对外通信、自启动等部署所需的全部配套包。
 
@@ -51,6 +51,16 @@
 | **[all_project](src/all_project/)** | 多楼层 / 多区域地图切换（`map_switch`，TCP 控制）+ 位姿/激光 UDP 上报（`tf_publish`），编出 `map_switch`、`tf_publish` 两个可执行 | [README](src/all_project/README.md) |
 | **[goalsender](src/goalsender/)** | 缓存里程计，通过 UDP 请求-响应协议把机器人位姿对外发布 | [README](src/goalsender/README.md) |
 | **[rtsp_stream](src/rtsp_stream/)** | 将建图画面 / ROS 图像转 RTSP / WebRTC 流，供远程监看 | [README](src/rtsp_stream/README.md) |
+
+### 乘梯 / 电梯控制（上位机程序，独立 CMake，非 ROS 包）
+
+跨楼层巡检的乘梯控制端：通过 Modbus 与电梯通信完成召梯/进梯/乘梯/出梯，并与机器人侧 `all_project/map_switch` 节点配合实现**两阶段地图切换**（乘梯期间后台 LOAD、出梯后 RELOC）。运行在上位机/控制端，不属于 catkin 工作空间。
+
+| 程序 | 作用 | 文档 |
+|----|------|------|
+| **[ElevatorControl_TCP](src/ElevatorControl_TCP/)** | Modbus **TCP**(网络) 电梯控制 + 两阶段地图切换 | [README](src/ElevatorControl_TCP/README.md) |
+| **[ElevatorControl_RTU](src/ElevatorControl_RTU/)** | Modbus **RTU**(串口) 电梯控制 + 两阶段地图切换 | [README](src/ElevatorControl_RTU/README.md) |
+| **[ElevatorSimulator](src/ElevatorSimulator/)** | 无真实电梯/`map_switch` 时的模拟器：`elevator_sim`(模拟电梯,Modbus 从站,TCP/RTU) + `map_switch_sim`(模拟地图切换服务端)，纯本机联调 | [README](src/ElevatorSimulator/README.md) |
 
 ---
 
@@ -102,6 +112,7 @@
 - **Livox-SDK2** + **livox_ros_driver2**（须先编译并 source）
 - `yaml-cpp`、`OpenCV`、`CURL`（map_switch / rtsp_stream 用）
 - `octomap`（octomap_mapping 用）
+- `libmodbus`（电梯控制 ElevatorControl_TCP/RTU / ElevatorSimulator 用：`sudo apt install libmodbus-dev`）
 
 ### Python（按需）
 ```bash
@@ -242,7 +253,10 @@ slam_ws/
     ├── pcd2pgm_package/        # PCD → 2D 栅格地图离线转换
     ├── all_project/            # 多楼层地图切换(map_switch) + 位姿/激光 UDP 上报(tf_publish)
     ├── goalsender/             # UDP 请求-响应 位姿发布
-    └── rtsp_stream/            # RTSP / WebRTC 远程监看
+    ├── rtsp_stream/            # RTSP / WebRTC 远程监看
+    ├── ElevatorControl_TCP/    # 上位机:Modbus TCP 电梯控制 + 两阶段地图切换(非 ROS 包)
+    ├── ElevatorControl_RTU/    # 上位机:Modbus RTU 电梯控制 + 两阶段地图切换(非 ROS 包)
+    └── ElevatorSimulator/      # 电梯/地图切换模拟器(无真实设备时本机联调,非 ROS 包)
 ```
 
 ---
@@ -253,7 +267,8 @@ slam_ws/
 - **livox_ros_driver2**（Livox）
 - **octomap_mapping / octomap_server**（OctoMap 团队）
 - **pointcloud_to_laserscan**（ros-perception）
+- **libmodbus**（电梯 Modbus 通信，LGPL）
 - 全局重定位参考 **FAST_LIO_LOCALIZATION**
 - 各包许可证见其各自目录（FAST-LIO 为 BSD）。
 
-> 维护：刘海洋 · 2025
+> 维护：刘海洋 · 2026
