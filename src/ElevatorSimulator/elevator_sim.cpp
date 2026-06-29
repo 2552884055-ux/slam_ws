@@ -2,7 +2,7 @@
 //  模拟电梯控制器 (Modbus 从站 / 服务器)
 //
 //  用途：在没有真实电梯控制器的情况下，模拟一台支持 Modbus 的电梯，
-//        供 ElevatorControl_TCP / ElevatorControl_RTU 上位机程序联调测试。
+//        供 ElevatorControl 上位机程序(TCP/RTU 二合一)联调测试。
 //
 //  上位机是 Modbus 主站(client)，本程序是 Modbus 从站(server)，寄存器布局依据
 //  《机器人乘梯通信协议》，并与上位机 elevator_controller.cpp 解码方式严格一致：

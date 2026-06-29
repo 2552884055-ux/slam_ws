@@ -1,6 +1,13 @@
-// Modbus RTU 方式电梯控制客户端实现
+// 电梯控制客户端实现 (Modbus TCP / RTU 二合一)
 #include "robot_elevator_client.hpp"
 
+// TCP 构造:通过 Modbus TCP 连接电梯控制器
+RobotElevatorClient::RobotElevatorClient(const std::string& ip, int port, int slave_id)
+    : m_controller(ip, port, slave_id)
+{
+}
+
+// RTU 构造:通过串口 Modbus RTU 连接电梯控制器
 RobotElevatorClient::RobotElevatorClient(const std::string& device, int baudrate, char parity,
                                          int data_bits, int stop_bits, int slave_id)
     : m_controller(device, baudrate, parity, data_bits, stop_bits, slave_id)
@@ -40,23 +47,57 @@ void RobotElevatorClient::dumpAllRegisters() {
     auto s = m_controller.getElevatorStatus();
     std::cout << "[解析] 投用=" << s.isActive << " 在线=" << s.isOnline
               << " 主门开=" << s.mainDoorOpen << " 副门开=" << s.viceDoorOpen
-              << " 上行=" << s.isUpward << " 下行=" << s.isDownward
+              << " 运行=" << s.isRuning << " 上行=" << s.isUpward << " 下行=" << s.isDownward
               << " 当前层=" << s.currentFloor << " 召梯层=" << s.callFloor << std::endl;
     std::cout << "==================================\n" << std::endl;
 }
 
-// 召梯到出发层并开门:等电梯上线/激活 → 若电梯不在目标层则召梯 → 等到达 → 开门
+// ===================== 单元测试 / 调试 ===================== //
+
+// 单测:召梯到指定层(发乘梯指令并等控制器确认 → 轮询到达)
+void RobotElevatorClient::testCallElevator(int floor) {
+    std::string f = formatFloor(floor);
+    std::cout << "\n===== [单测] 召梯到 " << f << " 层 =====" << std::endl;
+    if (!sendRideCommandWithRetry(f)) {
+        std::cerr << "[单测] 召梯失败:指令未被控制器确认" << std::endl;
+        return;
+    }
+    if (waitElevatorArrives(f))
+        std::cout << "[单测] 召梯成功,电梯已到达 " << f << " 层" << std::endl;
+    else
+        std::cerr << "[单测] 召梯失败:等待到达超时" << std::endl;
+}
+
+// 单测:开主门(发开门指令并等开到位)
+void RobotElevatorClient::testOpenMainDoor() {
+    std::cout << "\n===== [单测] 开主门 =====" << std::endl;
+    if (requestOpenMainDoorWithRetry())
+        std::cout << "[单测] 开主门成功" << std::endl;
+    else
+        std::cerr << "[单测] 开主门失败" << std::endl;
+}
+
+// 单测:关门(发关门指令并等关到位)
+void RobotElevatorClient::testCloseDoor() {
+    std::cout << "\n===== [单测] 关门 =====" << std::endl;
+    if (requestCloseDoorWithRetry())
+        std::cout << "[单测] 关门成功" << std::endl;
+    else
+        std::cerr << "[单测] 关门失败" << std::endl;
+}
+
+// 召梯到出发层并开门:等电梯上线/激活 → 若不在目标层则召梯 → 等到达 → 开门
 // 返回 true 表示电梯已到达出发层且门已打开,机器狗可进梯
 bool RobotElevatorClient::callElevatorAndOpenDoor(int FromFloor) {
     std::string FromFloorStr = formatFloor(FromFloor);
 
     if (!waitElevatorOnlineAndActive()) {
-        std::cerr << "[失败] 电梯激活超时" << std::endl; 
+        std::cerr << "[失败] 电梯激活超时" << std::endl;
         return false;
     }
-    
+
     auto status = m_controller.getElevatorStatus();
-    std::string currentFloor = status.currentFloor;  
+    std::string currentFloor = status.currentFloor;
     if (currentFloor == FromFloorStr) {
         std::cout << "电梯已在目标楼层，尝试开门..." << std::endl;
         if (!requestOpenMainDoorWithRetry()) {
@@ -175,7 +216,6 @@ bool RobotElevatorClient::closeDoorAndWaitMapThenReloc(unsigned long target_map,
     m_controller.disconnect();          // 断开连接
 
     // 等地图加载完成(进梯时 SendLoad 已非阻塞发出,乘梯期间后台加载)
-    // 若乘梯较快,此处可能短暂等待;若加载失败则直接报错
     if (!m_load_ok) {
         std::cout << "[等待地图加载完成...]" << std::endl;
         for (int i = 0; i < 600 && !m_load_ok; ++i) {
@@ -204,6 +244,7 @@ bool RobotElevatorClient::sendRideCommandWithRetry(const std::string& floor, int
         auto status = m_controller.getElevatorStatus();
         std::cout << "控制器反馈 callFloor = " << status.callFloor
             << "（目标 = " << floor << "）" << std::endl;
+
         if (status.callFloor == floor) {
             std::cout << "[乘梯指令确认成功] 目标楼层：" << status.callFloor << std::endl;
             return true;
@@ -241,7 +282,7 @@ bool RobotElevatorClient::requestCloseDoorWithRetry(int retryLimit, int interval
         if (!status.mainDoorOpen ) {
             std::cerr << "电梯主门已完全关闭" << std::endl;
             return true;
-        } 
+        }
     }
     std::cerr << "[错误] 多次关门指令失败" << std::endl;
     return false;
@@ -296,4 +337,3 @@ bool RobotElevatorClient::waitElevatorArrives(const std::string& floor, int time
         }
     }
 }
-

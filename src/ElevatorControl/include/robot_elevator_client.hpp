@@ -1,8 +1,6 @@
-// Modbus RTU 方式电梯控制客户端
+// 电梯控制客户端 (Modbus TCP / RTU 二合一)
 // 封装完整的乘梯 + 两阶段地图切换流程：召梯/进梯/乘梯/出梯/重定位
-
-#ifndef ROBOT_ELEVATOR_CLIENT_H
-#define ROBOT_ELEVATOR_CLIENT_H
+#pragma once
 
 #include "elevator_controller.hpp"
 #include "map_switch.hpp"
@@ -17,12 +15,19 @@
 
 class RobotElevatorClient {
 public:
-    // 构造:初始化串口 Modbus 连接(设备路径、波特率、校验位、数据位、停止位、从机ID)
+    // TCP 构造:IP、Modbus TCP 端口、从机ID
+    RobotElevatorClient(const std::string& ip, int port = 8000, int slave_id = 1);
+    // RTU 构造:串口设备、波特率、校验位、数据位、停止位、从机ID
     RobotElevatorClient(const std::string& device, int baudrate, char parity,
                         int data_bits, int stop_bits, int slave_id);
 
     // 读取并打印全部寄存器(输入寄存器+保持寄存器, 地址 0~14),含状态解析,便于调试观察
     void dumpAllRegisters();
+
+    // ===== 单元测试/调试用 =====
+    void testCallElevator(int floor); // 单测:召梯到指定层(发指令 + 等到达)
+    void testOpenMainDoor();        // 单测:开主门(发指令 + 等开到位)
+    void testCloseDoor();           // 单测:关门(发指令 + 等关到位)
 
     // 召梯到出发层并开门,等机器狗进入电梯后由上层调用下一步
     bool callElevatorAndOpenDoor(int FromFloor);
@@ -46,13 +51,11 @@ private:
     std::atomic<bool>  m_load_ok{false};  // LOAD 成功信号:由 SendLoad 回调(后台线程)置位
 
     // ===== 带重试的控制指令(每次重试间隔 intervalMs 毫秒) =====
-    bool sendRideCommandWithRetry(const std::string& floor, int retryLimit = 100, int intervalMs = 10);
-    bool requestOpenMainDoorWithRetry(int retryLimit = 100, int intervalMs = 10);
-    bool requestCloseDoorWithRetry(int retryLimit = 100, int intervalMs = 10);
+    bool sendRideCommandWithRetry(const std::string& floor, int retryLimit = 10, int intervalMs = 10);
+    bool requestOpenMainDoorWithRetry(int retryLimit = 100, int intervalMs = 1000);
+    bool requestCloseDoorWithRetry(int retryLimit = 100, int intervalMs = 1000);
 
     // ===== 等待逻辑 =====
-    bool waitElevatorOnlineAndActive(int timeout_sec = 60);    // 等电梯上线并激活
+    bool waitElevatorOnlineAndActive(int timeout_sec = 100);   // 等电梯上线并激活
     bool waitElevatorArrives(const std::string& floor, int timeout_sec = 180);  // 等电梯到达指定层
 };
-
-#endif

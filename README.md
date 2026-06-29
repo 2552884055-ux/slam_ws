@@ -58,8 +58,7 @@
 
 | 程序 | 作用 | 文档 |
 |----|------|------|
-| **[ElevatorControl_TCP](src/ElevatorControl_TCP/)** | Modbus **TCP**(网络) 电梯控制 + 两阶段地图切换 | [README](src/ElevatorControl_TCP/README.md) |
-| **[ElevatorControl_RTU](src/ElevatorControl_RTU/)** | Modbus **RTU**(串口) 电梯控制 + 两阶段地图切换 | [README](src/ElevatorControl_RTU/README.md) |
+| **[ElevatorControl](src/ElevatorControl/)** | Modbus 电梯控制 + 两阶段地图切换；**TCP(网络) / RTU(串口) 二合一**(同一套代码,构造时选传输方式) | [README](src/ElevatorControl/README.md) |
 | **[ElevatorSimulator](src/ElevatorSimulator/)** | 无真实电梯/`map_switch` 时的模拟器：`elevator_sim`(模拟电梯,Modbus 从站,TCP/RTU) + `map_switch_sim`(模拟地图切换服务端)，纯本机联调 | [README](src/ElevatorSimulator/README.md) |
 
 ---
@@ -112,7 +111,7 @@
 - **Livox-SDK2** + **livox_ros_driver2**（须先编译并 source）
 - `yaml-cpp`、`OpenCV`、`CURL`（map_switch / rtsp_stream 用）
 - `octomap`（octomap_mapping 用）
-- `libmodbus`（电梯控制 ElevatorControl_TCP/RTU / ElevatorSimulator 用：`sudo apt install libmodbus-dev`）
+- `libmodbus`（电梯控制 ElevatorControl / ElevatorSimulator 用：`sudo apt install libmodbus-dev`）
 
 ### Python（按需）
 ```bash
@@ -254,8 +253,7 @@ slam_ws/
     ├── all_project/            # 多楼层地图切换(map_switch) + 位姿/激光 UDP 上报(tf_publish)
     ├── goalsender/             # UDP 请求-响应 位姿发布
     ├── rtsp_stream/            # RTSP / WebRTC 远程监看
-    ├── ElevatorControl_TCP/    # 上位机:Modbus TCP 电梯控制 + 两阶段地图切换(非 ROS 包)
-    ├── ElevatorControl_RTU/    # 上位机:Modbus RTU 电梯控制 + 两阶段地图切换(非 ROS 包)
+    ├── ElevatorControl/        # 上位机:Modbus 电梯控制 + 两阶段地图切换,TCP/RTU 二合一(非 ROS 包)
     └── ElevatorSimulator/      # 电梯/地图切换模拟器(无真实设备时本机联调,非 ROS 包)
 ```
 

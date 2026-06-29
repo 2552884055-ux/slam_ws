@@ -1,15 +1,16 @@
 # ElevatorSimulator —— 模拟电梯控制器 + 模拟地图切换服务
 
 没有真实电梯控制器、也没有机器人侧 `all_project/map_switch` 节点时，用本目录的
-两个模拟程序给 `ElevatorControl_TCP` / `ElevatorControl_RTU` 上位机做**纯本机联调**：
+两个模拟程序给 `ElevatorControl`（TCP/RTU 二合一上位机）做**纯本机联调**：
 
 | 程序 | 角色 | 对接上位机的 | 协议 |
 |------|------|-------------|------|
 | `elevator_sim` | 模拟电梯（Modbus **从站/server**） | `ElevatorController` 召梯/开关门/乘梯 | Modbus TCP / RTU |
 | `map_switch_sim` | 模拟地图切换服务（TCP **server**） | `SendLoad` / `SendReloc` | 自定义 40B 请求 / 16B 回执 |
 
-- TCP 上位机（`ElevatorControl_TCP`）→ 跑 `elevator_sim --tcp` + `map_switch_sim`（见 §6.1）。
-- RTU 上位机（`ElevatorControl_RTU`）→ 跑 `elevator_sim --rtu` + `map_switch_sim`（见 §6.2）。
+`ElevatorControl/main.cpp` 用 TCP 还是 RTU，由其构造函数注释切换；模拟器对应用 `--tcp` 或 `--rtu`：
+- TCP（`main.cpp` 用 TCP 构造）→ 跑 `elevator_sim --tcp` + `map_switch_sim`（见 §6.1）。
+- RTU（`main.cpp` 用 RTU 构造）→ 跑 `elevator_sim --rtu` + `map_switch_sim`（见 §6.2）。
 
 上位机是 Modbus **主站(client)**，`elevator_sim` 是 Modbus **从站(server)**，
 寄存器布局与上位机 `elevator_controller.cpp` 的读写/解码方式严格一致。
@@ -76,19 +77,19 @@ cmake .. && make
 
 ## 4. 运行
 
-### 4.1 TCP（对接 ElevatorControl_TCP）
+### 4.1 TCP（对接 ElevatorControl，main.cpp 用 TCP 构造）
 
 ```bash
 ./elevator_sim --tcp 0.0.0.0 8000        # [ip] [port] [起始楼层]
 ```
 
-上位机 `ElevatorControl_TCP/main.cpp` 里把电梯 IP 改成模拟器所在机器的地址
+上位机 `ElevatorControl/main.cpp` 里把电梯 IP 改成模拟器所在机器的地址
 （本机联调用 `127.0.0.1`），端口保持 `8000`，即可跑通召梯/进梯/乘梯/出梯全流程。
 
 > 注意：`--tcp` 第一个参数是模拟器**监听**地址，用 `0.0.0.0` 监听所有网卡；
 > 上位机连接时填模拟器的实际 IP。
 
-### 4.2 RTU（对接 ElevatorControl_RTU）
+### 4.2 RTU（对接 ElevatorControl，main.cpp 用 RTU 构造）
 
 RTU 走串口，主站(控制器)与从站(模拟器)各需一个串口。本机用**两个 USB 转 TTL 模块交叉对接**：
 
@@ -107,7 +108,7 @@ sudo usermod -aG dialout $USER        # 加入 dialout 组(重新登录生效); 
 # 终端1：模拟器接 A 端
 ./elevator_sim --rtu /dev/ttyUSB0 9600 N 8 1 1   # device baud parity data stop slave [起始楼层]
 
-# 终端2：上位机 ElevatorControl_RTU 里把串口设备改成 B 端 /dev/ttyUSB1
+# 终端2：上位机 ElevatorControl/main.cpp 用 RTU 构造,串口设备改成 B 端 /dev/ttyUSB1
 #         波特率/校验/数据/停止/从机ID 两端必须一致(9600 N 8 1，从机ID 1)
 ```
 
@@ -137,9 +138,9 @@ sudo usermod -aG dialout $USER        # 加入 dialout 组(重新登录生效); 
 > → 步骤2 关门+LOAD+乘梯+开门 → 步骤3 关门+RELOC。步骤0 先打印寄存器快照，
 > 可单独用来确认与电梯通信正常。
 
-### 6.1 TCP 完整 main
+### 6.1 TCP 完整 main（`ElevatorControl/main.cpp` 用 TCP 构造）
 
-`ElevatorControl_TCP/main.cpp` 步骤2/3 会调用 `map_switch`，需同时启动两个模拟器。
+`main.cpp` 步骤2/3 会调用 `map_switch`，需同时启动两个模拟器。
 `main.cpp` 里电梯 IP 与 `server_addr` 本机联调已指向 `127.0.0.1`。
 
 ```bash
@@ -150,15 +151,16 @@ sudo usermod -aG dialout $USER        # 加入 dialout 组(重新登录生效); 
 ./map_switch_sim 6050 15 5
 
 # 终端3：运行 main
-cd ../../ElevatorControl_TCP && mkdir -p build && cd build && cmake .. && make
+cd ../../ElevatorControl && mkdir -p build && cd build && cmake .. && make
 ./ElevatorControl               # 可执行名是 ElevatorControl
 ```
 
 跑通后终端3 打印「乘梯 + 地图切换全部成功」。
 
-### 6.2 RTU 完整 main
+### 6.2 RTU 完整 main（`ElevatorControl/main.cpp` 用 RTU 构造）
 
-电梯走串口(两个 USB-TTL 交叉对接，见 §4.2 接线)，地图切换仍用 TCP 的 `map_switch_sim`：
+把 `main.cpp` 的 client 构造改成 RTU 那一行；电梯走串口(两个 USB-TTL 交叉对接，见 §4.2 接线)，
+地图切换仍用 TCP 的 `map_switch_sim`：
 
 ```bash
 # 终端1：电梯模拟器接 A 端
@@ -167,8 +169,8 @@ cd ../../ElevatorControl_TCP && mkdir -p build && cd build && cmake .. && make
 # 终端2：地图切换模拟服务端
 ./map_switch_sim 6050 15 5
 
-# 终端3：把 ElevatorControl_RTU/main.cpp 串口设备改成 B 端 /dev/ttyUSB1，编译运行
-cd ../../ElevatorControl_RTU && mkdir -p build && cd build && cmake .. && make
+# 终端3：main.cpp 改用 RTU 构造、串口设备填 B 端 /dev/ttyUSB1，编译运行
+cd ../../ElevatorControl && mkdir -p build && cd build && cmake .. && make
 ./ElevatorControl
 ```
 

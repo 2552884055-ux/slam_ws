@@ -194,7 +194,7 @@ rosrun all_project tf_publish     # 状态 UDP 上报
   - `SendReloc(addr, port, map_id, x, y, yaw)`：阻塞发 CMD_RELOC，等重定位完成返回 bool
   - `example/map_switch_client.cpp`：单次完整切换演示——发 LOAD → `sleep` 模拟乘梯 → 等 LOAD 成功 → 发 RELOC
   - 编译：`g++ -std=c++11 map_switch_client.cpp -o run -pthread`，运行一次即完成一次地图切换
-- **电梯控制集成**：见 `ElevatorControl_RTU` / `ElevatorControl_TCP`，已封装完整乘梯 + 换层流程（Modbus RTU/TCP + 三步函数）：`callElevatorAndOpenDoor` → `closeDoorLoadMapRideAndOpenDoor` → `closeDoorAndWaitMapThenReloc`
+- **电梯控制集成**：见 `ElevatorControl`（Modbus TCP/RTU 二合一），已封装完整乘梯 + 换层流程（三步函数）：`callElevatorAndOpenDoor` → `closeDoorLoadMapRideAndOpenDoor` → `closeDoorAndWaitMapThenReloc`
 
 ---
 
@@ -202,4 +202,4 @@ rosrun all_project tf_publish     # 状态 UDP 上报
 
 - catkin：`roscpp`、`roslib`、`rospy`、`std_msgs`、`geometry_msgs`、`nav_msgs`、`sensor_msgs`、`tf`、`pcl_ros`、`eigen_conversions`
 - 系统库：`CURL`、`yaml-cpp`、`OpenCV`（已 find_package，部分当前未强链接）
-- 上位机电梯控制：`libmodbus`（`ElevatorControl_RTU/TCP` 依赖，`sudo apt install libmodbus-dev`）
+- 上位机电梯控制：`libmodbus`（`ElevatorControl` 依赖，`sudo apt install libmodbus-dev`）

@@ -2,7 +2,7 @@
 //  模拟地图切换服务端 (map_switch mock)
 //
 //  用途：在没有机器人侧 all_project/map_switch 节点的情况下，模拟其 TCP 服务，
-//        供 ElevatorControl_TCP/RTU 的 SendLoad / SendReloc 联调测试。
+//        供 ElevatorControl 的 SendLoad / SendReloc 联调测试。
 //
 //  协议(与 map_switch.hpp 严格一致)：
 //    客户端连上后发送 40 字节 req_frame，服务端处理后回 16 字节 replay_frame。
