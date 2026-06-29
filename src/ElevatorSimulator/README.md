@@ -8,9 +8,12 @@
 | `elevator_sim` | 模拟电梯（Modbus **从站/server**） | `ElevatorController` 召梯/开关门/乘梯 | Modbus TCP / RTU |
 | `map_switch_sim` | 模拟地图切换服务（TCP **server**） | `SendLoad` / `SendReloc` | 自定义 40B 请求 / 16B 回执 |
 
-`ElevatorControl/main.cpp` 用 TCP 还是 RTU，由其构造函数注释切换；模拟器对应用 `--tcp` 或 `--rtu`：
+`ElevatorControl/main.cpp` 用 TCP 还是 RTU，由其构造函数注释切换（**默认 RTU 自动识别串口**）；模拟器对应用 `--tcp` 或 `--rtu`：
 - TCP（`main.cpp` 用 TCP 构造）→ 跑 `elevator_sim --tcp` + `map_switch_sim`（见 §6.1）。
-- RTU（`main.cpp` 用 RTU 构造）→ 跑 `elevator_sim --rtu` + `map_switch_sim`（见 §6.2）。
+- RTU（`main.cpp` 用 RTU 构造，默认）→ 跑 `elevator_sim --rtu` + `map_switch_sim`（见 §6.2）。
+
+> 本机双 USB-TTL 联调时，上位机两个串口都在 `/dev/ttyUSB*`，**建议给 `main.cpp` 的 RTU 构造
+> 显式填控制器侧设备**（如 `/dev/ttyUSB1`），而非留空自动识别——否则自动扫描可能先撞到模拟器占用的那个口。
 
 上位机是 Modbus **主站(client)**，`elevator_sim` 是 Modbus **从站(server)**，
 寄存器布局与上位机 `elevator_controller.cpp` 的读写/解码方式严格一致。

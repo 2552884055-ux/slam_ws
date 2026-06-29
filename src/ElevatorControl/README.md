@@ -6,6 +6,10 @@
 > **TCP 与 RTU 二合一**：libmodbus 创建上下文后读写接口完全一致，本包用同一套代码、
 > 在构造时选择传输方式——TCP(网络 IP+端口) 或 RTU(串口)。无需维护两份代码。
 
+> **RTU 串口免配置**：RTU 构造传空设备名即可**自动识别**梯控串口（优先 udev 别名
+> `/dev/elevator_rs485`，否则逐个探测 `/dev/ttyUSB*`）；运行时若 USB 号变化或串口掉线，
+> 心跳线程会**自动重新扫口重连**，无需人工改路径或重启。详见 §3。
+
 ---
 
 ## 1. 乘梯 + 换层完整流程
@@ -33,7 +37,8 @@
 
 ```cpp
 RobotElevatorClient client("127.0.0.1", 8000, 1);              // TCP: ip, port, slave_id
-RobotElevatorClient client("/dev/ttyUSB0", 9600,'N',8,1,1);    // RTU: device, baud, parity, data, stop, slave_id
+RobotElevatorClient client("", 9600, 'N', 8, 1, 1);            // RTU: 空设备名=自动识别串口
+RobotElevatorClient client("/dev/ttyUSB0", 9600,'N',8,1,1);    // RTU: 也可显式指定 device, baud, parity, data, stop, slave_id
 ```
 
 | 方法 | 说明 |
@@ -42,6 +47,14 @@ RobotElevatorClient client("/dev/ttyUSB0", 9600,'N',8,1,1);    // RTU: device, b
 | `callElevatorAndOpenDoor(FromFloor)` | 召梯到出发层并开门；返回 true 表示门已开，机器狗可进梯 |
 | `closeDoorLoadMapRideAndOpenDoor(ToFloor, target_map, addr, port)` | 关门 + 非阻塞发 LOAD + 发乘梯指令 + 等到达 + 开门 |
 | `closeDoorAndWaitMapThenReloc(target_map, addr, port, x, y, yaw)` | 关门 + 等地图加载完成 + 阻塞发 RELOC 重定位 |
+
+**单元测试/调试方法**（`main.cpp` 中默认注释，按需启用单独验证某个动作）：
+
+| 方法 | 说明 |
+|------|------|
+| `testCallElevator(floor)` | 仅召梯到指定层(发指令 + 等到达)，不走完整乘梯流程 |
+| `testOpenMainDoor()` | 仅开主门(发指令 + 等开到位) |
+| `testCloseDoor()` | 仅关门(发指令 + 等关到位) |
 
 ### 地图切换接口（`map_switch.hpp`）
 
@@ -56,15 +69,15 @@ RobotElevatorClient client("/dev/ttyUSB0", 9600,'N',8,1,1);    // RTU: device, b
 
 ---
 
-## 3. TCP / RTU 选择
+## 3. TCP / RTU 选择 + 串口自动识别 / 自愈
 
-在 `main.cpp` 里改 client 的构造方式即可（已用注释标好两行，二选一）：
+在 `main.cpp` 里改 client 的构造方式即可（已用注释标好两行，二选一；**默认 RTU 自动识别**）：
 
 ```cpp
 // 【TCP】网络:IP、端口、从机ID
-RobotElevatorClient client("127.0.0.1", 8000, 1);
-// 【RTU】串口:设备、波特率、校验位、数据位、停止位、从机ID
-// RobotElevatorClient client("/dev/ttyUSB0", 9600, 'N', 8, 1, 1);
+// RobotElevatorClient client("127.0.0.1", 8000, 1);
+// 【RTU】空字符串=自动识别串口(波特率、校验位、数据位、停止位、从机ID)
+RobotElevatorClient client("", 9600, 'N', 8, 1, 1);
 ```
 
 | 项目 | TCP | RTU |
@@ -73,15 +86,34 @@ RobotElevatorClient client("127.0.0.1", 8000, 1);
 | 构造 | `(ip, port, slave_id)` | `(device, baud, parity, data, stop, slave_id)` |
 | 重试间隔 | 1000ms（网络往返） | 100ms（低延迟串口） |
 
+### RTU 串口自动识别（构造时）
+
+RTU 构造时 `device` 的处理：
+
+1. **传空字符串 `""`** → 优先用 udev 别名 `/dev/elevator_rs485`（若存在）；否则调用
+   `ElevatorController::detectRtuDevice()` **逐个探测** `/dev/ttyUSB*`，对每个设备发 Modbus 读
+   （每口尝试 2 次、超时 200ms），返回第一个有梯控响应的设备；全部无响应则抛异常。
+2. **显式指定路径**（如 `/dev/ttyUSB0`）→ 先校验设备文件存在，不存在立即报错。
+
+> **建议**：给梯控 USB-RS485 配 udev 规则固定为 `/dev/elevator_rs485`，启动最快且最稳。
+
+### 运行时 USB 号变化自愈（`ensureRtuConnected`）
+
+后台心跳线程（`commFlagThread`，每秒写一次通信计数器）一旦写失败，立即调用
+`ensureRtuConnected()`：先短超时探测当前连接，仍无响应则**重新扫描所有 `/dev/ttyUSB*`**
+（原路径优先），用临时上下文逐个探测，找到梯控后**重建正式上下文并重连**。
+因此运行中拔插 USB、串口号从 `ttyUSB0` 跳到 `ttyUSB1` 等都能自动找回，无需重启或改配置。
+（TCP 模式下 `ensureRtuConnected()` 直接返回 true，不参与串口逻辑。）
+
 ---
 
 ## 4. 目录结构
 
 ```
 ElevatorControl/
-├── main.cpp                       # 乘梯 + 换层调用示例(TCP 默认, RTU 注释备选)
+├── main.cpp                       # 乘梯 + 换层调用示例(默认 RTU 自动识别, TCP 注释备选)
 ├── include/
-│   ├── elevator_controller.hpp    # 电梯控制器(TCP/RTU 两个构造函数,寄存器读写/状态/控制)
+│   ├── elevator_controller.hpp    # 电梯控制器(TCP/RTU 两个构造函数,寄存器读写/状态/控制,串口探测/自愈)
 │   ├── robot_elevator_client.hpp  # 封装完整乘梯 + 两阶段切换流程
 │   └── map_switch.hpp             # 两阶段地图切换协议(SendLoad / SendReloc)
 └── src/
@@ -96,7 +128,7 @@ ElevatorControl/
 
 | 变量 | 说明 |
 |------|------|
-| client 构造参数 | TCP：电梯 IP/端口；RTU：串口设备/波特率等 |
+| client 构造参数 | TCP：电梯 IP/端口；RTU：串口设备（空=自动识别）/波特率等 |
 | `server_addr` | 机器人侧 `map_switch` 节点 IP（默认本机联调 `127.0.0.1`，实际为机器人 IP） |
 | `map_switch_PORT` | map_switch 节点端口（默认 `6050`） |
 | `from_floor` / `to_floor` | 出发 / 目标楼层 |
@@ -124,6 +156,7 @@ make
 ```
 
 `main.cpp` 流程：**步骤0 打印全部寄存器** → 步骤1 召梯+开门 → 步骤2 关门+LOAD+乘梯+开门 → 步骤3 关门+RELOC。
+（步骤0 后留有 `testCallElevator/testOpenMainDoor/testCloseDoor` 注释，调试单个动作时按需取消注释。）
 
 ---
 
