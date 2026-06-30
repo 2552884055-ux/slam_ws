@@ -220,10 +220,13 @@ int modbusWithRetry(Func f, ElevatorController* self) {
         } catch (const std::runtime_error& e) {
             std::cerr << "[Modbus] 第 " << attempt+1 << " 次操作失败: " << e.what() << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(self->retryIntervalMs()));
-            if (!self->connect()) {
-                std::cerr << "[Modbus] 重连失败" << std::endl;
-            } else {
-                std::cerr << "[Modbus] 重连成功" << std::endl;
+            // RTU:扫口重建由心跳线程独占,这里只 sleep 后重试 f()。心跳一旦在
+            //      modbusMutex 内重建好 m_ctx,下一次 f() 即用上新口;retry 全程只在锁内
+            //      使用 m_ctx,不参与重建,故无 USB 号变化时的 use-after-free 竞态。
+            // TCP:无心跳 healer,socket 掉线需自行 connect() 重连。
+            if (self->transport() == ElevatorController::Transport::TCP) {
+                bool ok = self->connect();
+                std::cerr << (ok ? "[Modbus] 重连成功" : "[Modbus] 重连失败") << std::endl;
             }
         }
     }

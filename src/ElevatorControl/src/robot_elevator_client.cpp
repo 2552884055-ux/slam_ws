@@ -290,8 +290,9 @@ bool RobotElevatorClient::requestCloseDoorWithRetry(int retryLimit, int interval
 
 // =========================== 等待逻辑 ===============================
 
-// 启动通信保持线程,等电梯上线(isOnline)且激活(isActive),超时返回 false
-// 构造时已完成连接，此处只需启动心跳线程
+// 真实乘梯流程的入口:启动心跳线程(独占扫口重连),再等电梯上线(isOnline)且激活(isActive),超时返回 false。
+// 心跳只在此启动,不放进构造函数——测试方法(testXxx/dumpAllRegisters)不走这里,从而不受心跳后台写 reg2 干扰。
+// 由于每个真实流程(callElevatorAndOpenDoor 等)都先调本函数,故后续读写发生时心跳必已在跑,retry 只需重试、无需自行扫口。
 bool RobotElevatorClient::waitElevatorOnlineAndActive(int timeout_sec) {
     m_controller.startCommFlagThread();
 

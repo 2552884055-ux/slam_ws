@@ -63,6 +63,7 @@ public:
     void disconnect();
 
     int  retryIntervalMs() const { return m_retryIntervalMs; }
+    Transport transport() const { return m_transport; }
 
     struct ElevatorStatus {
         bool isOnline = false;          // 电梯设备通讯标志（通信正常）
