@@ -1,0 +1,44 @@
+# ============================================================
+# 部署步骤（在 OrangePi 上执行）
+#
+# 1. 复制到 systemd 目录：
+#      sudo cp gpio_trigger.service /etc/systemd/system/
+#
+# 2. 创建日志目录：
+#      mkdir -p /home/orangepi/logs
+#
+# 3. 启用开机自启并立即启动：
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable gpio_trigger.service
+#      sudo systemctl start  gpio_trigger.service
+#
+# 4. 查看运行状态：
+#      sudo systemctl status gpio_trigger
+#
+# 5. 实时查看日志：
+#      tail -f /home/orangepi/logs/gpio_trigger.log
+#
+# 6. 停止 / 禁用自启：
+#      sudo systemctl stop    gpio_trigger.service
+#      sudo systemctl disable gpio_trigger.service
+#
+# 注意：GPIO 访问需要 root 权限，User=root。
+#       若 orangepi 用户已加入 gpio 组可改为 User=orangepi。
+# ============================================================
+
+[Unit]
+Description=ROS GPIO Trigger Service
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/orangepi/slam_ws
+ExecStart=/usr/bin/python3 /home/orangepi/slam_ws/gpio_trigger.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/orangepi/logs/gpio_trigger.log
+StandardError=append:/home/orangepi/logs/gpio_trigger.log
+
+[Install]
+WantedBy=multi-user.target
